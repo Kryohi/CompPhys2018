@@ -3,14 +3,12 @@ using QuadGK, Plots #, PyPlot
 pyplot()
 #using Gadfly, StatPlots
 
-function RK4single(t, f, y, h=1e-3)
-    @show k1 = f(t, y)
-    k2 = f(t+h/2, y+k1*h/2)
-    k3 = f(t+h/2, y+k2*h/2)
-    k4 = f(t+h, y+k3*h)
-    @show y += (k1 + 2k2 + 2k3 + k4)*h/6
-    return y
+function integrateAll(arg, h)
+    s1 = sum(arg[3:2:end-2])
+    s2 = sum(arg[2:2:end-1])
+    return (arg[1] + arg[end] + 2*s1 + 4*s2) * h/3     # Regola di Simpson cubica
 end
+
 # dove fx è la funzione uguale alla derivata di x, ma che dipende da y
 function RK4system(t::Float64, fx, fy, x::Float64, y::Float64, h=1e-3)
     k1 = fy(t, x)
@@ -59,10 +57,12 @@ gui()
 ## Conversion to physical units
 G = 6.67408e-11
 ρ0 = 0.16e-45
-ρc = 0.2e-45 # central density, ρ0 < ρc < 8ρ0
-k = 2 # ???
+ρc = 1e-45 # central density, ρ0 < ρc < 8ρ0
+k = 1e20 # ???
 α = k*ρc^(1-1/n)*(n+1)/(4π*G)
-r = α.*umax
+r = α.*u
+rmax = α.*umax
+M = 4π*integrateAll(ρc.*θ.^n.*r.^2, h)
 
 
 ## Test vari
