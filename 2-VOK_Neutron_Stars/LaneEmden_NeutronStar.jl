@@ -1,7 +1,7 @@
 
-using QuadGK, Plots #, PyPlot
-pyplot()
-#using Gadfly, StatPlots
+using QuadGK, Plots, Rsvg
+#pyplot()
+Plots.plotlyjs()
 
 function integrateAll(arg, h)
     s1 = sum(arg[3:2:end-2])
@@ -24,71 +24,62 @@ function RK4system(t::Float64, fx, fy, x::Float64, y::Float64, h=1e-3)
     return [x, y]
 end
 
-n = 2.5 # polytropic index
 h = 1e-4
-Ymax = 6.0
-u = linspace(h, Ymax, ceil(Ymax/h))
-ϕ = zeros(ceil(Ymax/h))
-θ = zeros(ceil(Ymax/h))
+Umax = 6.0
+u = linspace(h, Umax, ceil(Umax/h))
+ϕ = zeros(ceil(Umax/h))
+θ = zeros(ceil(Umax/h))
 
 ## Initial conditions
 ϕ[1] = 0.0
 θ[1] = 1.0
 
 ## solution of the differential system
-# u and y are the same variable, called ξ on paper
-f1(y,phi) = -phi/y^2
-f2(y,theta) = y^2*theta^n
-#for i = 1:length(u)-1
-i = 1
-while θ[i] > 5e-4
-    θ[i+1], ϕ[i+1] = RK4system(u[i], f1, f2, θ[i], ϕ[i], h)
-    if i > (length(u)-10) println("i = ", i, "  θ = ", θ[i+1], "  ϕ = ", ϕ[i+1]) end
-    i+=1
-    #θ[i+1] = RK4step(f1, u[i], ϕ[i], h)
+# u is called ξ on paper
+function solveLaneEmden(n::Float64=2.2)  # n is the polytropic index
+    f1(u_,phi) = -phi/u_^2
+    f2(u_,theta) = u_^2*theta^n
+    #for i = 1:length(u)-1
+    i = 1
+    # Evaluate the differential equations until θ reaches 0
+    while θ[i] > 5e-4
+        θ[i+1], ϕ[i+1] = RK4system(u[i], f1, f2, θ[i], ϕ[i], h)
+        if i > (length(u)-10) println("i = ", i, "  θ = ", θ[i+1], "  ϕ = ", ϕ[i+1]) end
+        i+=1
+    end
+    return [θ, ϕ, u[i]] # where u[i] is the adimensional radius found
 end
-umax = u[i]
+θ, ϕ, umax = solveLaneEmden(2.1)
 
 ## Plots
-plot(u,θ)
-plot!(u,ϕ)
-gui()
+p1 = plot(u[θ.!=0], θ[θ.!=0])   # plotta ϕ e θ all'interno della stella
+plot!(u[θ.!=0], ϕ[θ.!=0])
+savefig(p1,"thetaphi.svg")
+
+## Find the radius and mass of the star for a range of n
+function radiusMass(nmin, nmax)
+    U = []  #raggio adimensionale
+    M = []  #massa adimensioanle
+    for n = nmin:0.05:nmax
+        θ, ϕ, umax = solveLaneEmden(n)
+        push!(U, umax)   #  mette in un array il raggio adimensionale raggiunto
+        push!(M, 4π*integrateAll(θ.*u.^2, 1e-4))
+    end
+    return [U,M]
+end
+U, M = radiusMass(1.5, 3.5)
+p2 = plot(U,M)
+savefig(p2,"aradiusamass.svg")
+
 
 ## Conversion to physical units
-G = 6.67408e-11
-ρ0 = 0.16e-45
-ρc = 1e-45 # central density, ρ0 < ρc < 8ρ0
-k = 1e20 # ???
-α = k*ρc^(1-1/n)*(n+1)/(4π*G)
-r = α.*u
-rmax = α.*umax
-M = 4π*integrateAll(ρc.*θ.^n.*r.^2, h)
-
-
-## Test vari
-# function RK4osc(f, t, v, x, h=1e-3)
-#     k1 = f(t, x)
-#     k2 = f(t+h/2, x+k1*h/2)
-#     k3 = f(t+h/2, x+k2*h/2)
-#     k4 = f(t+h, x+k3*h)
-#     v += (k1 + 2k2 + 2k3 + k4)*h/6
-#     x += v*h
-#     return [v, x]
-# end
-# h = 1e-3
-# Tmax = 5
-# t = linspace(h, Tmax, ceil(Tmax/h))
-# V = zeros(ceil(Tmax/h))
-# Y = zeros(ceil(Tmax/h))
-# V[1] = 1.0
-# Y[1] = 3.0
-# molla(t, y) = -2*y
-# pos(t, v) = v
-# for i=1:(length(t)-1)
-#     V[i+1], Y[i+1] = RK4osc(molla, t[i], V[i], Y[i], h)
-#     println("vx = ", V[i+1], "  x = ", Y[i+1])
-# end
-#
-# plot(t,Y)
-# plot!(t,V)
-# gui()
+function convertToPhysics(umax,n)
+    G = 6.67408e-11
+    ρ0 = 0.16e-45
+    ρc = 1e-45 # central density, ρ0 < ρc < 8ρ0
+    k = 1e20 # ???
+    α = k*ρc^(1-1/n)*(n+1)/(4π*G)
+    r = α.*u
+    rmax = α.*umax
+    M = 4π*integrateAll(ρc.*θ.^n.*r.^2, h)
+end
