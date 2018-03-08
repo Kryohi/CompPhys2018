@@ -4,8 +4,8 @@
 # cercare modo per rendere i cicli interni o esterni multithread
 #! stoppare ricerca n se S a estremi non ha più segno opposto
 
-using QuadGK, Plots, Rsvg, ColorSchemes, Cairo, LaTeXStrings
-using TikzPictures
+using QuadGK, Plots, ColorSchemes, LaTeXStrings
+
 gamma = [21.7, 24.8, 150]   # H2-H2, H2-O2, O2-O2
 
 ## Metodi vari
