@@ -1,5 +1,5 @@
 
-using QuadGK, Plots, LaTeXStrings
+using Plots, LaTeXStrings
 
 function integrateAll(arg, h)
     s1 = sum(arg[3:2:end-2])
