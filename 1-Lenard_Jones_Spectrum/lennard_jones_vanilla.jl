@@ -4,7 +4,8 @@
 # cercare modo per rendere i cicli interni o esterni multithread
 #! stoppare ricerca n se S a estremi non ha più segno opposto
 
-using BenchmarkTools, QuadGK, Plots #, PyPlot, Gadfly, StatPlots
+using QuadGK, Plots, Rsvg, ColorSchemes, Cairo, LaTeXStrings
+using TikzPictures
 gamma = [21.7, 24.8, 150]   # H2-H2, H2-O2, O2-O2
 
 ## Metodi vari
@@ -153,20 +154,23 @@ function findSpectrum(max::Int, γ; Emin=-0.95, Emax=-1e-5, xMin=0.95, xMax=16.0
     return energy
 end
 
-@time @show E = findSpectrum(39, gamma[3], Emin=-0.95, Emax=-1e-7, xMin=0.97, xMax=24.0)
+@time @show E = findSpectrum(5, gamma[1], Emin=-0.95, Emax=-1e-7, xMin=0.97, xMax=24.0)
 # con Float64 al massimo si arriva a 5 livelli con γ1, 6 con γ2 e circa 40 con γ3
 # a E=-0.00001 xout è circa 8.6, a -0.000002 circa 11.2, -10^-8 circa 27
 
 ## Grafici
-pyplot()
+pgfplots()
 function plotLevels(f, E)
-    X = linspace(0.94, 2.5, 20000)
+    X = linspace(0.94, 3.0, 8000)
     V = f.(X)
-    Plots.plot(X, V)
+    Plots.plot(X, V, label="V", xaxis=("x",(0.9,3.0)), yaxis=("E",(-1.08,2.55)), linewidth=2, linecolor=RGB(0.3,0.8,0.4))
+    C = RGB[ColorSchemes.inferno[floor(Int,z)] for z=linspace(100,180,length(E))]
     for n=1:length(E)
-        plot!(X, E[n]*ones(length(X)), label=["E",n])
+        #labl = string("E_", n)
+        Plots.hline!([E[n]], label=latexstring("E_",n), linecolor=C[n],linewidth=0.5)
     end
-    gui()
+    savefig("energylevels1.pdf")
+    savefig("energylevels1.svg")
 end
 V(x) = 4*(x^-12-x^-6)
 plotLevels(V, E)
