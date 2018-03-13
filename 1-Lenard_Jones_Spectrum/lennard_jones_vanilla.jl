@@ -133,7 +133,7 @@ function S(E::Float64, n::Int, γ, xMin=0.97, xMax=16.0)
     if length(X) >= 2
         #println("E = ", E, "; A^2 at boundaries: ", E - 4*(X[1]^-12 -X[1]^-6), "   ", E - 4*(X[2]^-12 - X[2]^-6))
         #println("\nBetween ", X[1]+1e-10, " and ", X[2]-1e-10, ":\n  S = ", γ*integrate(intgr, X[1]+1e-10, X[2]-1e-10) - n*π)
-        #return γ*integrate(intgr, X[1], X[end]) - n*π  # dominio ristretto di 1e-9 perché se no boh
+        #return γ*integrate(intgr, X[1], X[end]) - n*π
         return γ*quadgk(intgr, X[1], X[end], order=8, maxevals=10^8)[1] - n*π   #così si imbroglia però
     else
         warn("Less than 2 zeros found, xout and/or xin are missing (", X, "  ", E, ")")
@@ -154,23 +154,23 @@ function findSpectrum(max::Int, γ; Emin=-0.95, Emax=-1e-5, xMin=0.95, xMax=16.0
     return energy
 end
 
-@time @show E = findSpectrum(5, gamma[1], Emin=-0.95, Emax=-1e-7, xMin=0.97, xMax=24.0)
+@time @show E = findSpectrum(6, gamma[2], Emin=-0.95, Emax=-1e-7, xMin=0.97, xMax=24.0)
 # con Float64 al massimo si arriva a 5 livelli con γ1, 6 con γ2 e circa 40 con γ3
 # a E=-0.00001 xout è circa 8.6, a -0.000002 circa 11.2, -10^-8 circa 27
 
 ## Grafici
+#gr()   #set plotting backend
 pgfplots()
 function plotLevels(f, E)
-    X = linspace(0.94, 3.0, 8000)
+    X = linspace(0.94, 3.0, 4000)
     V = f.(X)
-    Plots.plot(X, V, label="V", xaxis=("x",(0.9,3.0)), yaxis=("E",(-1.08,2.55)), linewidth=2, linecolor=RGB(0.3,0.8,0.4))
+    Plots.plot(X, V, label="V", xaxis=("x",(0.9,3.0)), yaxis=("E",(-1.08,2.00)), linewidth=2, linecolor=RGB(0.3,0.8,0.4))
     C = RGB[ColorSchemes.inferno[floor(Int,z)] for z=linspace(100,180,length(E))]
     for n=1:length(E)
-        #labl = string("E_", n)
-        Plots.hline!([E[n]], label=latexstring("E_",n), linecolor=C[n],linewidth=0.5)
+        Plots.hline!([E[n]], label=latexstring("E_",n), linecolor=C[n],linewidth=1)
     end
-    savefig("energylevels1.pdf")
-    savefig("energylevels1.svg")
+    savefig("energylevels3.pdf")
+    savefig("energylevels3.svg")
 end
 V(x) = 4*(x^-12-x^-6)
 plotLevels(V, E)
