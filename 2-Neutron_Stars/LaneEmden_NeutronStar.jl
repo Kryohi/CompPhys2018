@@ -95,16 +95,19 @@ savefig(p5,"aradiusamass.pdf")
 
 
 ## Conversion to physical units
-function convertToPhysics(u,θ,n)
-    umax = u[end]
+function convertToPhysics(umax, mass, n, fattoremisterioso)
     G = 6.67408e-11
-    ρ0 = 0.16e-45
-    ρc = 0.16e-45 # central density, ρ0 < ρc < 8ρ0
-    K = 10.2*(1.9885e30)^(-2/3)
-    α = sqrt(K*ρc^(1-1/n)*(n+1)/(4π*G))
-    r = α.*u
-    rmax = α.*umax
-    M = 4π*integrateAll(ρc.*θ.^n.*r.^2, h)
+    ρ0 = 0.16e45*1.674927351e-27
+    ρc = ρ0*fattoremisterioso # central density, ρ0 < ρc < 8ρ0
+    K = 10.2*(1.9885e30)^(-2/3)*1e6
+    @show α = sqrt(K*ρc^(1-1/n)*(n+1)/(4π*G))
+    #r = α.*u
+    Rmax = α.*umax
+    @show Mass = α.^3.*ρc.*mass
+    return [Rmax, Mass]
 end
 
-#convertToPhysics(U,)
+Rmax, Mass = convertToPhysics(U[2], M[2], 1.6, 1)
+
+
+## TOV
