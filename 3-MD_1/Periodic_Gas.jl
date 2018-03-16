@@ -10,9 +10,9 @@ function boxMuller(sigma, x0=0)
     return exp(-(c1 - x0)/2sigma^2)/sqrt(2π*sigma^2)
 end
 
-function shiftSystem!(A)
-    A - L*round(A/L)
-end
+# function shiftSystem!(A)
+#     A - L*round(A/L)
+# end
 
 function initializeSystem(N::Int, density, T)
     L = (N/density)^(1/3)
@@ -21,20 +21,19 @@ function initializeSystem(N::Int, density, T)
     X = Array{Float64}(3N)
     Na = round(Int,(N/4)^(1/3)) # numero celle per dimensione
     a = L / Na  # passo reticolare
-    for i,j,k = 0:(Na-1)  # loop su tutti i cubi del reticolo cfc
-        n = i + Na*j + Na*Na*k # numero unico per ogni tripletta i,j,k
+    for i=0:Na-1, j=0:Na-1, k = 0:Na-1  # loop over every cell of the cfc lattice
+        n = i*Na*Na + j*Na + k # unique number for each triplet i,j,k
         X[n*4+1], X[N+n*4+1], X[2N+n*4+1] = a*i, a*j, a*k # vertice celle
-        X[n*4+2], X[N+n*4+2], X[2N+n*4+2] = a*i + a*sqrt(2), a*j + a*sqrt(2), a*k
-        X[n*4+3], X[N+n*4+3], X[2N+n*4+3] = a*i + a*sqrt(2), a*j, a*k + a*sqrt(2)
-        X[n*4+4], X[N+n*4+4], X[2N+n*4+4] = a*i, a*j + a*sqrt(2), a*k + a*sqrt(2)
+        X[n*4+2], X[N+n*4+2], X[2N+n*4+2] = a*i + a/sqrt(2), a*j + a/sqrt(2), a*k
+        X[n*4+3], X[N+n*4+3], X[2N+n*4+3] = a*i + a/sqrt(2), a*j, a*k + a/sqrt(2)
+        X[n*4+4], X[N+n*4+4], X[2N+n*4+4] = a*i, a*j + a/sqrt(2), a*k + a/sqrt(2)
     end
-end
     #shiftSystem!(X)
     V = Array{Float64}(3N)
     V .= boxMuller(σ)
     return [X, V]
 end
 
-XX, VV = initializeSystem(32, 4, 1)
-scatter(XX[1:32], XX[33:64], XX[65:96])
+XX, VV = initializeSystem(32, 32, 1)
+scatter(XX[1:32], XX[33:64], XX[65:96],m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(0,1)), yaxis=("y",(0,1)), zaxis=("z",(0,1)))
 gui()
