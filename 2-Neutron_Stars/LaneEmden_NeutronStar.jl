@@ -38,12 +38,12 @@ function solveLaneEmden(u, n, h=1e-3)  # n is the polytropic index, u the radius
     θ[1] = 1.0
 
     # Differential system
-    f1(u_,phi) = -phi/u_^2
-    f2(u_,theta) = u_^2*theta^n
+    f1(u_, ϕ_) = -ϕ_ / u_^2  # where ϕ is the derivative of θ times u^2
+        f2(u_, θ_) = u_^2 * θ_^n
 
     # Evaluate the differential equations until θ reaches 0 (almost)
     i = 1
-    while θ[i]^n > 1e-4
+    while θ[i]^n > 1e-6
         θ[i+1], ϕ[i+1] = RK4system(u[i], f1, f2, θ[i], ϕ[i], h)
         i+=1
     end
@@ -52,8 +52,8 @@ end
 
 ## plot θ e ρ inside the star for different ns
 function densityProfiles(nn)
-    h = 5e-4
-    Umax = 7.0  # maximum adimensional radius considered
+    h = 1e-4
+    Umax = 10.0  # maximum adimensional radius considered
     u = linspace(h, Umax, ceil(Umax/h))
     θ, ϕ, = solveLaneEmden(u, nn[1], h)
     p1 = plot(u[1:5:end], θ[1:5:end], xlab=L"\xi", ylab=L"\theta", label=latexstring("n = ",nn[1]), xaxis=((0.0, 6.01)))
@@ -76,8 +76,8 @@ densityProfiles(1.5:0.3:3.0)
 function radiusMass(nn)
     U = []  # raggio adimensionale
     M = []  # massa adimensioanle
-    h = 5e-4
-    Umax = 6.0  # maximum adimensional radius
+    h = 1e-4
+    Umax = 8.0  # maximum adimensional radius
     u = linspace(h, Umax, ceil(Umax/h))
     for n ∈ nn
         θ, ϕ, R = solveLaneEmden(u, n, h)
@@ -88,6 +88,7 @@ function radiusMass(nn)
 end
 
 U, M = radiusMass(1.5:0.1:3.0)
+
 p4 = scatter(1.5:0.1:3.0, U, leg=false, m=(5,0.7,:blue,Plots.stroke(0)),w=5,xaxis=("n",(1.45,3.05)), yaxis=("Adimensional radius",(3.5,6.0)))
 Plots.savefig(p4,"raggi.pdf")
 p5 = Plots.plot(U, M, xaxis=("Adimensional radius",(3.65,5.5)), yaxis=("Adimensional mass",(26,36)), leg=false)
@@ -135,4 +136,3 @@ end
 
 p8 = Plots.scatter(R_ur, M_ur, xaxis=("R [km]",(3e4, 7.2e4)), yaxis=("Mass [suns]",(5.0, 6.0)), leg=false)
 savefig(p8, "radiusmass2_ur.pdf")
-gui()
