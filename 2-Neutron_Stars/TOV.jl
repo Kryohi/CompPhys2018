@@ -41,8 +41,8 @@ function solveLaneEmden(u, n, h=1e-3)  # n is the polytropic index, u the radius
     θ[1] = 1.0
 
     # Differential system
-    f1(r_, θ_, M_) = -1*(θ_ +1)*(r_^3* θ_^(n+1) + M_) / ((n+1)*r_^2 + 2M_*r_)
-    f2(r_, θ_) = 4π * θ_^n * r_^2
+    f1(r_, θ_, m_) = -1*(r_^3* θ_^(n+1) + m_) / (r_^2 + 4π*m_)
+    f2(r_, θ_) = θ_^n * r_*r_
 
     # Evaluate the differential equations until θ reaches 0 (almost)
     i = 1
@@ -50,7 +50,7 @@ function solveLaneEmden(u, n, h=1e-3)  # n is the polytropic index, u the radius
         θ[i+1], μ[i+1] = RK4system(u[i], f1, f2, θ[i], μ[i], h)
         i+=1
     end
-    return [θ, μ[i], u[i]] # where u[i] is the adimensional radius found, μ[i] the a-mass
+    return [θ, μ, u[i]] # where u[i] is the adimensional radius found, μ[i] the a-mass
 end
 
 
@@ -59,19 +59,19 @@ function densityProfiles(nn)
     h = 1e-4
     Umax = 50.0  # maximum adimensional radius considered
     u = linspace(h, Umax, ceil(Umax/h))
-    θ, M, = solveLaneEmden(u, nn[1], h)
-    p1 = plot(u[1:5:end], θ[1:5:end], ylab=L"\theta", label=latexstring("n = ",nn[1]), xaxis=(L"\xi",(0.0, 45.01)))
-    p2 = plot(u[1:5:end], θ[1:5:end].^nn[1], xaxis=(L"\xi",(0,15)), ylab=L"\rho/\rho_c", label=latexstring("n = ",nn[1]))
-    #p3 = plot(u[1:5:end], ϕ[1:5:end].*u[1:5:end].^(-2), xlab=L"\xi", ylab=L"\frac{d\theta}{d\xi}", label=latexstring("n = ",nn[1]))
+    θ, m, = solveLaneEmden(u, nn[1], h)
+    @show length(find(θ))
+
+    p1 = plot(u[1:5:find(θ)[end]], θ[1:5:find(θ)[end]], ylab=L"\theta", label=latexstring("n = ",nn[1]), xaxis=(L"\xi"))
+    p2 = plot(u[1:5:find(m)[end]], m[1:5:find(m)[end]], xaxis=(L"\xi",(0,15)), ylab=L"\tilde M", label=latexstring("n = ",nn[1]))
+
     for n ∈ nn[2:end]
-        θ, M, = solveLaneEmden(u, n, h)
-        plot!(p1, u[1:5:end], θ[1:5:end], label=latexstring("n = ",n))
-        plot!(p2, u[1:5:end], θ[1:5:end].^n, label=latexstring("n = ",n))
-        #plot!(p3, u[1:5:end], ϕ[1:5:end].*u[1:5:end].^(-2), label=latexstring("n = ",n))
+        θ, m, = solveLaneEmden(u, n, h)
+        plot!(p1, u[1:5:find(θ)[end]], θ[1:5:find(θ)[end]], label=latexstring("n = ",n))
+        plot!(p2, u[1:5:find(m)[end]], m[1:5:find(m)[end]], label=latexstring("n = ",n))
     end
     Plots.savefig(p1,"theta_gr.pdf")    #better to use with the pgfplots() backend
-    Plots.savefig(p2,"density_gr.pdf")
-    #Plots.savefig(p3,"dtheta_gr.pdf")
+    Plots.savefig(p2,"mass_profile_gr.pdf")
 end
 
 densityProfiles(1.5:0.3:3.0)
@@ -85,7 +85,8 @@ function radiusMass(nn)
     Umax = 50.0  # maximum adimensional radius
     u = linspace(h, Umax, ceil(Umax/h))
     for i = 1:length(nn)
-        θ, M[i], U[i] = solveLaneEmden(u, nn[i], h)
+        θ, m, U[i] = solveLaneEmden(u, nn[i], h)
+        M[i] = m[find(m)[end]]
         #push!(U, R)   #  mette in un array il raggio adimensionale raggiunto
         #push!(U, M)   #  mette in un array il raggio adimensionale raggiunto
         #push!(M, 4π*integrateAll(θ.^n.*u.^2, h))
@@ -94,9 +95,9 @@ function radiusMass(nn)
 end
 
 U, M = radiusMass(1.5:0.1:3.0)
-p4 = scatter(1.5:0.1:3.0, U, leg=false, m=(5,0.9,:blue,Plots.stroke(0)), w=5, xaxis=("n",(1.45,3.05)), yaxis=("Adimensional radius",(2.8,7.8)))
+p4 = scatter(1.5:0.1:3.0, U, leg=false, m=(5,0.9,:blue,Plots.stroke(0)), w=5, xaxis=("n"), yaxis=("Adimensional radius"))
 Plots.savefig(p4,"raggi_gr.pdf")
-p5 = Plots.plot(U, M, xaxis=("Adimensional radius",(2.8,7.8)), yaxis=("Adimensional mass",(5.8,6.5)), leg=false)
+p5 = Plots.plot(U[find(M)], M[find(M)], xaxis=("Adimensional radius"), yaxis=("Adimensional mass"), leg=false)
 savefig(p5,"aradiusamass_gr.pdf")
 
 
@@ -104,7 +105,7 @@ savefig(p5,"aradiusamass_gr.pdf")
 function convertToPhysics(umax, mass, n, fattoremisterioso)
     G = 6.67408e-11
     mn = 1.674927351e-27 # neutron mass
-    ρ0 = 0.16e45#*mn
+    ρ0 = 0.16e45*mn
     ρc = ρ0*fattoremisterioso # central density, ρ0 < ρc < 8ρ0
     ħ = 1.0545718e-34
     c = 299792458
@@ -119,7 +120,7 @@ function convertToPhysics(umax, mass, n, fattoremisterioso)
     @show α = sqrt(K*(ρc)^(1+1/n)*(n+1)/(4π*G*(ρc*mn)^2))
     Rmax = α*umax
     Ms = 1.9885e30 # solar mass (kg)
-    @show Mass =  ρc*mass/Ms
+    @show Mass =  4π*ρc*mass
     return [Rmax, Mass]
 end
 
