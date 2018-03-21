@@ -3,26 +3,50 @@ using Plots, LaTeXStrings, BenchmarkTools
 pyplot()
 
 function simulation()
-    T = 5   # temperature
-    N = 32    # number of particles
-    density = 0.1
-    nmax = 2000
-    global L = cbrt(N/density)
+    T = 2   # temperature
+    N = 256    # number of particles (32, 108, 256...)
+    density = 1.5
+    nmax = 10000
+    fstep = 50
+    E = zeros(Int(nmax/20)) # array of total energy
+    L = cbrt(N/density)
     X, V = initializeSystem(N, L, T)
     X_ = zeros(3N, round(Int,nmax/20)) # storia delle posizioni
 
     for n = 1:nmax
-        F = forces(X)
-        X, V = velocityVerlet(X, V, F, 1e-4)
-        if n%20 == 0
-            X_[:,round(Int,n/20)] = X
+        F = forces(X,L)
+        X, V = velocityVerlet(X, V, F, L, 1e-4)
+        if n%fstep == 0
+            @show E[Int(n/fstep)] = energy(X,V,L)
+            X_[:,round(Int,n/fstep)] = X
         end
     end
-    size(X_)[2]
+
     @gif for i =1:size(X_)[2]
-        scatter(X_[1:3:3N-2,i], X[2:3:3N-1,i], X[3:3:3N,i], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+        scatter(X_[1:3:3N-2,i], X_[2:3:3N-1,i], X_[3:3:3N,i], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
     end
     gui()
+end
+
+function energy(r,v,L)
+    T = 0.0
+    V = 0.0
+    for l=1:Int(length(r)/3)-1
+        T += sqrt(v[3l+1]^2 + v[3l+2]^2 + v[3l+3]^2)
+        for i=0:l-1
+            dx = r[3l+1] - r[3i+1]
+            dx = dx - L*round(dx/L)
+            dy = r[3l+2] - r[3i+2]
+            dy = dy - L*round(dy/L)
+            dz = r[3l+3] - r[3i+3]
+            dz = dz - L*round(dz/L)
+            dr2 = dx*dx + dy*dy + dz*dz
+            if dr2 < L*L/4
+                V += LJ(sqrt(dr2))
+            end
+        end
+    end
+    return T+V
 end
 
 function boxMuller(sigma, N::Int, x0=0.0)
@@ -71,8 +95,9 @@ function initializeSystem(N::Int, L, T)
 end
 
 der_LJ(dr) = 4*(6*dr^-8 - 12*dr^-14)
+LJ(dr) = -4*(dr^-6 - dr^-12)
 
-function forces(r)
+function forces(r,L)
     F = zeros(length(r))
     for l=1:Int(length(r)/3)-1
         for i=0:l-1
@@ -97,11 +122,11 @@ function forces(r)
     return F
 end
 
-function velocityVerlet(x, v, F, dt)
+function velocityVerlet(x, v, F, L,dt)
     x_ = Array{Float64}(length(x))
     @. x_ =  x + v*dt + F*dt^2/2
     shiftSystem!(x_, L)
-    F_ = forces(x_)
+    F_ = forces(x_,L)
     @. v += (F + F_)*dt/2
     return x_, v
 end
