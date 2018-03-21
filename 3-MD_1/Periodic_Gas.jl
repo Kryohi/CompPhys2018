@@ -1,31 +1,40 @@
 
-using Plots, LaTeXStrings, BenchmarkTools
-pyplot()
+using Plots, LaTeXStrings
+pyplot(size = (1280, 1080))
 
 function simulation()
-    T = 2   # temperature
+    T = 4   # temperature
     N = 256    # number of particles (32, 108, 256...)
-    density = 1.5
+    density = 1.3
     nmax = 10000
-    fstep = 50
-    E = zeros(Int(nmax/20)) # array of total energy
+    dt = 1e-4
+    fstep = 20
+    E = zeros(Int(nmax/fstep)) # array of total energy
     L = cbrt(N/density)
     X, V = initializeSystem(N, L, T)
-    X_ = zeros(3N, round(Int,nmax/20)) # storia delle posizioni
+    X_ = zeros(3N, round(Int,nmax/fstep)) # storia delle posizioni
+    Plots.scatter(X[1:3:3N-2], X[2:3:3N-1], X[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
 
-    for n = 1:nmax
+    @show @elapsed for n = 1:nmax
         F = forces(X,L)
-        X, V = velocityVerlet(X, V, F, L, 1e-4)
+        X, V = velocityVerlet(X, V, F, L, dt)
         if n%fstep == 0
             @show E[Int(n/fstep)] = energy(X,V,L)
-            X_[:,round(Int,n/fstep)] = X
+            X_[:,Int(n/fstep)] = X
         end
     end
 
-    @gif for i =1:size(X_)[2]
-        scatter(X_[1:3:3N-2,i], X_[2:3:3N-1,i], X_[3:3:3N,i], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+    anim = @animate for i =1:size(X_)[2]-1
+        Plots.scatter(X_[1:3:3N-2,i], X_[2:3:3N-1,i], X_[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
     end
-    gui()
+    filename = string("./LJ_",N,"_T",T,"_d",density,".mp4")
+    mp4(anim, filename, fps = 30)
+    return anim
+end
+
+function makeVideo(pngs)
+    filename = string("./LJ_",N,"_T",T,"_d",density,".mp4")
+    mp4(anim, filename, fps = 30)
 end
 
 function energy(r,v,L)
@@ -66,7 +75,7 @@ function vecboxMuller(sigma, N::Int, x0=0.0) #should be ~50% faster
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
 end
 
-function shiftSystem!(A,L)
+function shiftSystem!(A::Array{Float64,1}, L::Float64)
     for j in eachindex(A)
         @inbounds A[j] = A[j] - L*round(A[j]/L)
     end
@@ -94,12 +103,12 @@ function initializeSystem(N::Int, L, T)
     return [X, V]
 end
 
-der_LJ(dr) = 4*(6*dr^-8 - 12*dr^-14)
-LJ(dr) = -4*(dr^-6 - dr^-12)
+LJ(dr::Float64) = -4*(dr^-6 - dr^-12)
+der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
 
-function forces(r,L)
-    F = zeros(length(r))
-    for l=1:Int(length(r)/3)-1
+function forces(r::Array{Float64,1}, L::Float64)
+    F = zeros(r)
+    Threads.@threads for l=1:Int(length(r)/3)-1
         for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -122,7 +131,7 @@ function forces(r,L)
     return F
 end
 
-function velocityVerlet(x, v, F, L,dt)
+@fastmath function velocityVerlet(x, v, F, L, dt)
     x_ = Array{Float64}(length(x))
     @. x_ =  x + v*dt + F*dt^2/2
     shiftSystem!(x_, L)
