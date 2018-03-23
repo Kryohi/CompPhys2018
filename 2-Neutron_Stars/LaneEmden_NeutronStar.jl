@@ -125,7 +125,7 @@ R_nr, M_nr = Array{Float64}(8), Array{Float64}(8)
 for i=1:8
     R_nr[i], M_nr[i] = convertToPhysics(U[1], M[1], 1.5, i)
 end
-p6 = Plots.scatter(R_nr, M_nr, xaxis=("R [km]",(7e3, 10500)), yaxis=("Mass [suns]",(0.1, 0.3001)), leg=false)
+p6 = Plots.scatter(R_nr./1e3, M_nr, xaxis=("R [km]",(7, 10.5)), yaxis=("Mass [suns]",(0.1, 0.3001)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
 savefig(p6,"radiusmass_nr.pdf")
 
 # Physical ultrarelativistic radii and mass
@@ -134,5 +134,5 @@ for j=1:8
     R_ur[j], M_ur[j] = convertToPhysics(U[end], M[end], 3.0, j)
 end
 
-p8 = Plots.scatter(R_ur, M_ur, xaxis=("R [km]",(3e4, 7.2e4)), yaxis=("Mass [suns]",(5.0, 6.0)), leg=false)
-savefig(p8, "radiusmass2_ur.pdf")
+p8 = Plots.scatter(R_ur./1e3, M_ur, xaxis=("R [km]",(3, 72)), yaxis=("Mass [suns]",(5.0, 6.0)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
+savefig(p8, "radiusmass_ur.pdf")
