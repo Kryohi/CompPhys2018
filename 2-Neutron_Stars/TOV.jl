@@ -3,15 +3,20 @@
 
 using Plots, LaTeXStrings
 #gr()   #faster than pgfplots()
-pyplot() #xaxis=(0.0,Umax), yaxis=(0.0,1.05) plot!(u[θ.!=0], ϕ[θ.!=0])
+pyplot() #xaxis=(0.0,Umax), yaxis=(0.0,1.05) plot!(u[ρ.!=0], ϕ[ρ.!=0])
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
 
+function integrateAll(arg, h)
+    s1 = sum(arg[3:2:end-2])
+    s2 = sum(arg[2:2:end-1])
+    return (arg[1] + arg[end] + 2*s1 + 4*s2) * h/3     # Regola di Simpson cubica
+end
 
 # dove fx è la funzione uguale alla derivata di x, ma che dipende da y
 function RK4system(t::Float64, fx, fy, x::Float64, y::Float64, h=1e-3)
-    @show k1 = fy(t, x)
-    @show l1 = fx(t, x, y)
+    k1 = fy(t, x)
+    l1 = fx(t, x, y)
     k2 = fy(t+h/2, x+l1*h/2)
     l2 = fx(t+h/2, x+l1*h/2, y+k1*h/2)
     k3 = fy(t+h/2, x+l2*h/2)
@@ -27,154 +32,109 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
     println("\nStarting the number crunching...\n")
     umax = u[end]
     μ = zeros(ceil(umax/h)) #massa adimensionale
-    θ = zeros(ceil(umax/h))
+    ρ = zeros(ceil(umax/h))
+    g = 1+1/n
 
     # SI ma in km e masse solari
-    # Ms = 1.9885e30
-    # G = 6.67408e-20*Ms
-    # ħ = 1.0545718e-40/Ms
-    # mn = 1.674927351e-27/Ms # neutron mass
-    # ρ0 = 0.16e54*mn
+    Ms = 1.9885e30
+    G = 6.67408e-11*Ms
+    ħ = 1.0545718e-34/Ms
+    mn = 1.674927351e-27/Ms # neutron mass
+    ρ0 = 0.16e45#*mn
+    ρc = ρ0*gnam
+    c = 299792458
+
+    # SI
+    # G = 6.67408e-11
+    # ħ = 1.0545718e-34
+    # mn = 1.674927351e-27 # neutron mass
+    # ρ0 = 0.16e45#*mn
     # ρc = ρ0*gnam
-    # c = 299792.458
+    # c = 299792458
 
     # Geometriche con masse solari
-    Ms, G, c = 1, 1, 1
-    @show ħ = 1.0545718e-27*5.0279e-34*(6.7706e-6)^2/2.0296e5
-    @show mn = 1.674927351e-24*5.0279e-34 # neutron mass
-    ρ0 = 0.16e39/(6.7706e-6)^(3)#*mn
-    #@show ρ0 = 2e17*1.6199e-12
-    @show ρc = ρ0*gnam
+    # Ms, G, c = 1, 1, 1
+    # @show ħ = 1.0545718e-27*5.0279e-34*(6.7706e-6)^2/2.0296e5
+    # @show mn = 1.674927351e-24*5.0279e-34 # neutron mass
+    # ρ0 = 0.16e39/(6.7706e-6)^(3)#*mn
+    # #@show ρ0 = 2e17*1.6199e-12
+    # @show ρc = ρ0*gnam
 
     # Differential system
     if n == 1.5
-        @show K = (3*π^2)^(1/3)*ħ^2/(5*mn)      # non-relativistic
+        @show K = (3*π^2)^(2/3)*ħ^2/(5*mn)      # non-relativistic
         #@show K = (ħ*c)/(15π^2*mn*c^2)*(3*π^2/(mn*c^2))^(5/3)
         #K = 1
     elseif n == 3.0
         @show K = c*ħ*(3*π^2)^(1/3)/4   # ultrarelativistic
     else error("NANI")
     end
-    @show Pc = K*ρc^(1/n+1)
-
-    #f1(r_, P_, m_) = -1*(G*((P_/K)^(-1-1/n) + P_/c^2))*(m_ + 4π*r_^3*P_/c^2)/(r_^2 - 2r_*G*m_/c^2)
-    #f2(r_, P_) = 4π * r_^2 * (P_/K)^(-1-1/n)    #SI km
-    #f1(r_,P_,m_) = -1*(P_^(-1-1/n) + P_) * (m_ + 4π*r_^3*P_)/(r_^2 - 2r_*m_)
-    #f2(r_,P_) = 4π * r_^2 * P_^(-1-1/n)
-    # f1(r_, P_, m_) = -1*((P_/K)^(-1-1/n) + P_)*(m_ + 4π*r_^3*P_) / (r_^2 - 2r_*m_)
-    # f2(r_, P_) = 4π * r_^2 * (P_/K)^(-1-1/n)
-    #f1(r_, θ_, m_) = -(G*c^2/(Pc*(n+1)*(c^2*r_^2 - 2G*m_*r_)))*(ρc + Pc*θ_/c^2)*(m_ + 4π*r_^3*Pc*θ_^(n+1)/c^2)
-    #f2(r_, θ_) = 4π*ρc*θ_^n * r_^2
-    # ultimo tentativo
-    f1(r_, θ_, m_) = -1*(θ_ + ρc/Pc) * (m_/r_ + 4π*r_^2*Pc*θ_^(n+1)) / (r_ - 2m_)
-    f2(r_, θ_) = 4π * r_^2 * ρc * θ_^n
+    Pc = K*ρc^(1/n+1)
+    f1(r_, ρ_, m_) = -1*(G*(ρ_*mn + K*ρ_^g/c^2))*(m_ + 4π*r_^3*K*ρ_^g/c^2) / (K*g*ρ_^(1/n)*(r_^2 - 2r_*G*m_/c^2))
+    f2(r_, ρ_) = 4π * r_^2 * ρ_ *mn    # SI in masse solari
 
     # Initial conditions
-    #@show P[1] = Pc
-    # μ[1] = 0
-    # @show μ[1] = 4π*h^3/3*ρc
-    μ[1] = 0.0
-    θ[1] = 1.0
-    # Evaluate the differential equations until θ reaches 0 (almost)
+
+    @show ρ[1] = ρc
+    @show μ[1] = ρc*4π*h^2*mn
+
+    # Evaluate the differential equations until ρ reaches 0 (almost)
     i = 1
-    u_ = h
-    #while P[i] > P[1]*1e-5
-    while θ[i]^n > 1e-6
-        @show θ[i+1], μ[i+1] = RK4system(u_, f1, f2, θ[i], μ[i], h)
-        #@show in_pascal = P[i+1]*K/1.8063e-38
-        # if P[i+1] < 200
-        #     h=1e-5
-        #     if P[i+1] < 10
-        #         h=1e-9
-        #     end
-        # end
-        u_ += h
+    while ρ[i] > ρ[1]*1e-6
+        ρ[i+1], μ[i+1] = RK4system(u[i], f1, f2, ρ[i], μ[i], h)
         i+=1
     end
-    return [θ, μ, u_] # where u[i] is the adimensional radius found, μ[i] the a-mass
-end #./1.8063e-38
-
-
-## plot θ e ρ inside the star for different ns
-function densityProfiles()
-    h = 1.0
-    Umax = 100.0  # maximum adimensional radius considered
-    #u = [h/1e8:h/1e8:h/1e4-h/1e8; linspace(h/1e4, Umax, ceil(Umax/h))]
-    u = linspace(h, Umax, ceil(Umax/h))
-    @show length(u)
-    θ, m, raggio= solveLaneEmden(u, 3.0, h)
-    @show raggio
-    p1 = plot(u[1:5:find(θ)[end]], θ[1:5:find(θ)[end]], xaxis=(L"R [km]"), ylab=L"\theta", label=L"n = 1.5")
-    p2 = plot(u[1:5:find(m)[end]], m[1:5:find(m)[end]], xaxis=(L"R [km]"), ylab=L"M", label=L"n = 1.5")
-    # θ, m, = solveLaneEmden(u, 3.0, h)
-    # plot!(p1, u[1:5:find(θ)[end]], θ[1:5:find(θ)[end]], label=latexstring("n = 3.0"))
-    # plot!(p2, u[1:5:find(m)[end]], m[1:5:find(m)[end]], label=latexstring("n = 3.0"))
-    Plots.savefig(p1,"theta3_gr.pdf")    #better to use with the pgfplots() backend
-    Plots.savefig(p2,"mass3_profile_gr.pdf")
-    gui()
+    return [ρ, μ, u[i], μ[i]] # where u[i] is the radius found, μ[i] the mass
 end
 
-densityProfiles()
 
-
-## Find the radius and mass of the star for a range of n (not yet in physical units)
-function radiusMass(nn)
-    U = Array{Float64}(length(nn))  # raggio adimensionale
-    M = Array{Float64}(length(nn))  # massa adimensioanle
-    h = 1e-10
-    Umax = 0.00001  # maximum adimensional radius
+## plot ρ e ρ inside the star for different ns
+function densityProfiles()
+    U = zeros(2)  # raggio
+    M = zeros(2)  # massa
+    h = 0.1
+    Umax = 90000.0  # maximum radius considered
     u = linspace(h, Umax, ceil(Umax/h))
-    for i = 1:length(nn)
-        θ, m, U[i] = solveLaneEmden(u, nn[i], h)
-        M[i] = m[find(m)[end]]
-    end
+
+    ρ, m, U[1], M[1] = solveLaneEmden(u, 3.0, h)
+    p1 = plot(u[1:5:find(ρ)[end]-1]./1e3, ρ[1:5:find(ρ)[end]-1]./1e42, xaxis=("R [km]"), ylab=L"\theta", label=L"n = 3.0")
+    p2 = plot(u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], xaxis=("R [km]",(0,8e4)), yaxis=("M",(0,3.5)), label=L"n = 3.0")
+
+    ρ, m, U[2], M[2] = solveLaneEmden(u, 1.5, h)
+    plot!(p1, u[1:5:find(ρ)[end]]./1e3, ρ[1:5:find(ρ)[end]]./1e42, label=latexstring("n = 1.5"))
+    plot!(p2, u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], label=latexstring("n = 1.5"))
+    Plots.savefig(p1,"theta3_gr.pdf")
+    Plots.savefig(p2,"mass3_profile_gr.pdf")
+    gui()
     return [U,M]
 end
 
-# h2 = 1e-3
-# Umax2 = 100.0  # maximum adimensional radius
-# u2 = linspace(h2, Umax2, ceil(Umax2/h2))
-# θ2, m2, U2 = solveLaneEmden(h2, 1.5, h2)
-#
-# U, M = radiusMass([1.5,3.0])
-# p4 = scatter([1.5,3.0], U, leg=false, m=(5,0.9,:blue,Plots.stroke(0)), w=5, xaxis=("n"), yaxis=("Adimensional radius"))
-# Plots.savefig(p4,"raggi3_gr.pdf")
-# p5 = Plots.plot(U[find(M)], M[find(M)], xaxis=("Adimensional radius"), yaxis=("Adimensional mass"), leg=false)
-# savefig(p5,"aradiusamass3_gr.pdf")
+U, M = densityProfiles()
 
 
-# ## Conversion to physical units
-# function convertToPhysics(umax, mass, n, fattoremisterioso)
-#     #G = 6.67408e-11
-#     mn = 1.674927351e-27 # neutron mass
-#     ρ0 = 0.16e45*mn
-#     ρc = ρ0*fattoremisterioso # central density, ρ0 < ρc < 8ρ0
-#     # ħ = 1.0545718e-34
-#     # c = 299792458
-#     # α = sqrt(K*(ρc)^(1+1/n)*(n+1)/(4π*G*(ρc*mn)^2))
-#     Rmax = umax
-#     Ms = 1.9885e30 # solar mass (kg)
-#     @show Mass =  4π*ρc*mass/Ms
-#     return [Rmax, Mass]
-# end
-#
-#
-# ## Plots of the radii and mass varying ρc (fattoremisterioso), in the relativistic and non-relativistic case
-#
-# # Physical nonrelativistic radii and mass
-# R_nrgr, M_nrgr = Array{Float64}(8), Array{Float64}(8)
-# for i=1:8
-#     R_nrgr[i], M_nrgr[i] = convertToPhysics(U[1], M[1], 1.5, i)
-# end
-# p6 = Plots.scatter(R_nrgr, M_nrgr, xaxis=("R [km]"), yaxis=("Mass [suns]"), leg=false)
-# savefig(p6,"radiusmass3_nrgr.pdf")
-#
-# # Physical ultrarelativistic radii and mass
-# R_urgr, M_urgr = Array{Float64}(8), Array{Float64}(8)
-# for j=1:8
-#     R_urgr[j], M_urgr[j] = convertToPhysics(U[end], M[end], 3.0, j)
-# end
-#
-# p8 = Plots.scatter(R_urgr, M_urgr, xaxis=("R [km]"), yaxis=("Mass [suns]"), leg=false)
-# savefig(p8, "radiusmass3_urgr.pdf")
-# gui()
+
+## Plots of the radii and mass varying ρc (gnam), in the relativistic and non-relativistic case
+
+# Physical nonrelativistic radii and mass
+R_nrgr, M_nrgr = Array{Float64}(8), Array{Float64}(8)
+for i=1:8
+    h = 0.1
+    Umax = 30000.0  # maximum radius considered
+    u = linspace(h, Umax, ceil(Umax/h))
+    _, __, R_nrgr[i], M_nrgr[i] = solveLaneEmden(u, 1.5, h, i)
+end
+p3 = Plots.scatter(R_nrgr./1e3, M_nrgr, xaxis=("R [km]"), yaxis=("Mass [suns]"), leg=false, m=(7,0.7,:blue,Plots.stroke(0)))
+savefig(p3,"radiusmass3_nrgr.pdf")
+
+# Physical ultrarelativistic radii and mass
+R_urgr, M_urgr = Array{Float64}(8), Array{Float64}(8)
+for j=1:8
+    h = 0.1
+    Umax = 90000.0  # maximum radius considered
+    u = linspace(h, Umax, ceil(Umax/h))
+    _, __, R_urgr[j], M_urgr[j] = solveLaneEmden(u, 3.0, h, j)
+end
+
+p4 = Plots.scatter(R_urgr./1e3, M_urgr, xaxis=("R [km]"), yaxis=("Mass [suns]"), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
+savefig(p4, "radiusmass3_urgr.pdf")
+gui()
