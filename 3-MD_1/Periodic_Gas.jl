@@ -1,6 +1,8 @@
 
 using Plots, LaTeXStrings, ProgressMeter
 pyplot(size = (1280, 1080))
+fnt = "Source Sans Pro"
+default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
 
 # Main function, it creates the initial systems, runs it through the Verlet algorithm for maxsteps
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
@@ -28,9 +30,10 @@ function simulation(; N::Int=256, T::Float64=4, rho::Float64=1.3, maxsteps = 500
 end
 
 
-# Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional maxwell-boltzmann velocities
+# Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
+# maxwell-boltzmann velocities
 function initializeSystem(N::Int, L, T)
-    Na = round(Int,∛(N/4)) # numero celle per dimensione
+    Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
     if Na - ∛(N/4) != 0
         error("Can't make a cubic FCC crystal with this number of particles :(")
@@ -134,13 +137,22 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
 end
 
+# fare attenzione a non prendere particella vicino ai bordi
+function lindemann(X0, XX, N, rho)   # where X0 is a triplet at t=0, XX the hystory of that point at t>0
+    L = cbrt(N/rho)
+    Na = round(Int,∛(N/4)) # number of cells per dimension
+    a = L / Na  # passo reticolare
+    deltaX = sqrt(sum((XX[1,:]-X0[1]).^2 .+ (XX[2,:]-X0[2]).^2 .+ (XX[3,:]-X0[3]).^2) / (length(XX[1,:])-1))
+    return deltaX*2/a
+end
+
 
 # makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
 function makeVideo(X_; N="???", T="???", rho="???")
     L = cbrt(N/rho)
     prog = Progress(size(X_)[2],1)  # initialize progress bar
     println("\nI'm cooking pngs to make a nice video. It will take some time...")
-    
+
     anim = @animate for i =1:size(X_)[2]
         Plots.scatter(X_[1:3:3N-2,i], X_[2:3:3N-1,i], X_[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
         next!(prog) # increment the progress bar

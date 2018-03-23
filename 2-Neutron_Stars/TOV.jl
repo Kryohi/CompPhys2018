@@ -10,8 +10,8 @@ default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=P
 
 # dove fx è la funzione uguale alla derivata di x, ma che dipende da y
 function RK4system(t::Float64, fx, fy, x::Float64, y::Float64, h=1e-3)
-    k1 = fy(t, x)
-    l1 = fx(t, x, y)
+    @show k1 = fy(t, x)
+    @show l1 = fx(t, x, y)
     k2 = fy(t+h/2, x+l1*h/2)
     l2 = fx(t+h/2, x+l1*h/2, y+k1*h/2)
     k3 = fy(t+h/2, x+l2*h/2)
@@ -27,7 +27,7 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
     println("\nStarting the number crunching...\n")
     umax = u[end]
     μ = zeros(ceil(umax/h)) #massa adimensionale
-    P = zeros(ceil(umax/h))
+    θ = zeros(ceil(umax/h))
 
     # SI ma in km e masse solari
     # Ms = 1.9885e30
@@ -42,38 +42,45 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
     Ms, G, c = 1, 1, 1
     @show ħ = 1.0545718e-27*5.0279e-34*(6.7706e-6)^2/2.0296e5
     @show mn = 1.674927351e-24*5.0279e-34 # neutron mass
-    @show ρ0 = 0.16e39/(6.7706e-6)^(3)#*mn
-    @show ρ0 = 2e17*1.6199e-12
-    ρc = ρ0*gnam
+    ρ0 = 0.16e39/(6.7706e-6)^(3)#*mn
+    #@show ρ0 = 2e17*1.6199e-12
+    @show ρc = ρ0*gnam
 
     # Differential system
     if n == 1.5
         @show K = (3*π^2)^(1/3)*ħ^2/(5*mn)      # non-relativistic
-        @show K = (ħ*c)/(15π^2*mn*c^2)*(3*π^2/(mn*c^2))^(5/3)
+        #@show K = (ħ*c)/(15π^2*mn*c^2)*(3*π^2/(mn*c^2))^(5/3)
         #K = 1
     elseif n == 3.0
         @show K = c*ħ*(3*π^2)^(1/3)/4   # ultrarelativistic
     else error("NANI")
     end
+    @show Pc = K*ρc^(1/n+1)
 
     #f1(r_, P_, m_) = -1*(G*((P_/K)^(-1-1/n) + P_/c^2))*(m_ + 4π*r_^3*P_/c^2)/(r_^2 - 2r_*G*m_/c^2)
     #f2(r_, P_) = 4π * r_^2 * (P_/K)^(-1-1/n)    #SI km
     #f1(r_,P_,m_) = -1*(P_^(-1-1/n) + P_) * (m_ + 4π*r_^3*P_)/(r_^2 - 2r_*m_)
     #f2(r_,P_) = 4π * r_^2 * P_^(-1-1/n)
-    f1(r_, P_, m_) = -1*((P_/K)^(-1-1/n) + P_)*(m_ + 4π*r_^3*P_) / (r_^2 - 2r_*m_)
-    f2(r_, P_) = 4π * r_^2 * (P_/K)^(-1-1/n)
+    # f1(r_, P_, m_) = -1*((P_/K)^(-1-1/n) + P_)*(m_ + 4π*r_^3*P_) / (r_^2 - 2r_*m_)
+    # f2(r_, P_) = 4π * r_^2 * (P_/K)^(-1-1/n)
     #f1(r_, θ_, m_) = -(G*c^2/(Pc*(n+1)*(c^2*r_^2 - 2G*m_*r_)))*(ρc + Pc*θ_/c^2)*(m_ + 4π*r_^3*Pc*θ_^(n+1)/c^2)
     #f2(r_, θ_) = 4π*ρc*θ_^n * r_^2
+    # ultimo tentativo
+    f1(r_, θ_, m_) = -1*(θ_ + ρc/Pc) * (m_/r_ + 4π*r_^2*Pc*θ_^(n+1)) / (r_ - 2m_)
+    f2(r_, θ_) = 4π * r_^2 * ρc * θ_^n
 
     # Initial conditions
-    @show P[1] = K*ρc^(1/n+1)
-    μ[1] = 0
-    @show μ[1] = 4π*h^3/3*ρc
+    #@show P[1] = Pc
+    # μ[1] = 0
+    # @show μ[1] = 4π*h^3/3*ρc
+    μ[1] = 0.0
+    θ[1] = 1.0
     # Evaluate the differential equations until θ reaches 0 (almost)
     i = 1
     u_ = h
     #while P[i] > P[1]*1e-5
-        #@show P[i+1], μ[i+1] = RK4system(u_, f1, f2, P[i], μ[i], h)
+    while θ[i]^n > 1e-6
+        @show θ[i+1], μ[i+1] = RK4system(u_, f1, f2, θ[i], μ[i], h)
         #@show in_pascal = P[i+1]*K/1.8063e-38
         # if P[i+1] < 200
         #     h=1e-5
@@ -81,21 +88,21 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
         #         h=1e-9
         #     end
         # end
-        #u_ += h
-        #i+=1
-    #end
-    return [P, μ, u_] # where u[i] is the adimensional radius found, μ[i] the a-mass
+        u_ += h
+        i+=1
+    end
+    return [θ, μ, u_] # where u[i] is the adimensional radius found, μ[i] the a-mass
 end #./1.8063e-38
 
 
 ## plot θ e ρ inside the star for different ns
 function densityProfiles()
-    h = 1e-6
-    Umax = 5  # maximum adimensional radius considered
+    h = 1.0
+    Umax = 100.0  # maximum adimensional radius considered
     #u = [h/1e8:h/1e8:h/1e4-h/1e8; linspace(h/1e4, Umax, ceil(Umax/h))]
     u = linspace(h, Umax, ceil(Umax/h))
     @show length(u)
-    θ, m, raggio= solveLaneEmden(u, 1.5, h)
+    θ, m, raggio= solveLaneEmden(u, 3.0, h)
     @show raggio
     p1 = plot(u[1:5:find(θ)[end]], θ[1:5:find(θ)[end]], xaxis=(L"R [km]"), ylab=L"\theta", label=L"n = 1.5")
     p2 = plot(u[1:5:find(m)[end]], m[1:5:find(m)[end]], xaxis=(L"R [km]"), ylab=L"M", label=L"n = 1.5")
