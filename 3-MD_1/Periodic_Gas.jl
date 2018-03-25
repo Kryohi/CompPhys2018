@@ -1,34 +1,35 @@
 
-using Plots, LaTeXStrings, ProgressMeter
+using Plots, LaTeXStrings, ProgressMeter, CSV
 pyplot(size = (1280, 1080))
 fnt = "Source Sans Pro"
-default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
+default(titlefont=Plots.font(fnt, 18), guidefont=Plots.font(fnt, 18), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
 
-# Main function, it creates the initial systems, runs it through the Verlet algorithm for maxsteps
+# Main function, it creates the initial systems, runs it through the Verlet algorithm for maxsteps,
+# saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N::Int=256, T::Float64=4, rho::Float64=1.3, maxsteps = 5000, animation=false)
-    dt = 1e-4
-    fstep = 20
-    E = zeros(Int(maxsteps/fstep)+1) # array of total energy
+function simulation(; N=256, T=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 5000, anim=false, csv=true)
+
     L = cbrt(N/rho)
     X, V = initializeSystem(N, L, T)
-    XX = zeros(3N, Int(maxsteps/fstep)+1) # storia delle posizioni
+    XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
+    E = zeros(Int(maxsteps/fstep)) # array of total energy
+    println()
 
-    @time for n = 1:maxsteps
+    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
+    for n = 1:maxsteps
+        if n%fstep == 1
+            E[ceil(Int,n/fstep)] = energy(X,V,L)
+            XX[:,ceil(Int,n/fstep)] = X
+        end
         F = forces(X,L)
         X, V = velocityVerlet(X, V, F, L, dt)
-        if n%fstep == 0
-            E[Int(n/fstep)+1] = energy(X,V,L)
-            XX[:,Int(n/fstep)+1] = X
-        end
+        next!(prog)
     end
-    if animation
-        makeVideo(XX, N=N, T=T, rho=rho)
-    end
+    csv && saveCSV(XX', N=N, T=T, rho=rho)
+    anim && makeVideo(XX, N=N, T=T, rho=rho)
 
     return XX, E   # returns a matrix with the hystory of positions, plus the energy and pressure arrays
 end
-
 
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
 # maxwell-boltzmann velocities
@@ -59,7 +60,7 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
 
 function forces(r::Array{Float64}, L::Float64)
     F = zeros(r)
-    Threads.@threads for l=1:Int(length(r)/3)-1
+    Threads.@threads for l=1:Int(length(r)/3)-1 #multithreading is convenient only for large N
         for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -148,18 +149,26 @@ end
 
 
 # makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
-function makeVideo(X_; N="???", T="???", rho="???")
+# don't run this with more than ~1000 frames unless you have a lot of spare time...
+function makeVideo(M; N="???", T="???", rho="???", fps = 30)
     L = cbrt(N/rho)
-    prog = Progress(size(X_)[2],1)  # initialize progress bar
     println("\nI'm cooking pngs to make a nice video. It will take some time...")
+    prog = Progress(size(M)[2], dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
 
-    anim = @animate for i =1:size(X_)[2]
-        Plots.scatter(X_[1:3:3N-2,i], X_[2:3:3N-1,i], X_[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+    anim = @animate for i =1:size(M)[2]
+        Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
         next!(prog) # increment the progress bar
     end
-    filename = string("/home/kryohi/Video/LJ_",N,"_T",T,"_d",rho,".mp4")
-    mp4(anim, filename, fps = 30)
-    gui()
+    file = string("./3-MD_1/Video/LJ",N,"_T",T,"_d",rho,".mp4")
+    mp4(anim, file, fps = fps)
+    gui() #show the last frame in a separate window
+end
+
+function saveCSV(M; N="???", T="???", rho="???")
+    D = convert(DataFrame, M)
+    file = string("./3-MD_1/Data/LJ",N,"_T",T,"_d",rho,".csv")
+    CSV.write(file, D)
+    info("System saved in ", file)
 end
 
 function make3Dplot(A::Array{Float64}; L=-1.0)

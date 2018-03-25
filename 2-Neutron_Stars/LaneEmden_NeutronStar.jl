@@ -1,7 +1,7 @@
 
 using Plots, LaTeXStrings
 #gr()   #faster than pgfplots()
-pyplot() #xaxis=(0.0,Umax), yaxis=(0.0,1.05) plot!(u[θ.!=0], ϕ[θ.!=0])
+pyplot()
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
 
@@ -77,7 +77,7 @@ function radiusMass(nn)
     U = []  # raggio adimensionale
     M = []  # massa adimensioanle
     h = 1e-4
-    Umax = 8.0  # maximum adimensional radius
+    Umax = 10.0  # maximum adimensional radius
     u = linspace(h, Umax, ceil(Umax/h))
     for n ∈ nn
         θ, ϕ, R = solveLaneEmden(u, n, h)
@@ -106,7 +106,7 @@ function convertToPhysics(umax, mass, n, fattoremisterioso)
     if n == 3.0
         K = c*ħ/4*(3*π^2)^(1/3)   # ultrarelativistic
     elseif n == 1.5
-        K = (3*π^2)^(1/3)*ħ^2/(5*mn)      # non-relativistic
+        K = (3*π^2)^(2/3)*ħ^2/(5*mn)      # non-relativistic #was ^(1/3)
     end
     #K = 10.2*(1.9885e30)^(-2/3)*1e6
     #@show K = h^2/(15*π^2*mn)(3π^2/(mn*c^2))^(5/3)
@@ -125,8 +125,8 @@ R_nr, M_nr = Array{Float64}(8), Array{Float64}(8)
 for i=1:8
     R_nr[i], M_nr[i] = convertToPhysics(U[1], M[1], 1.5, i)
 end
-p6 = Plots.scatter(R_nr./1e3, M_nr, xaxis=("R [km]",(7, 10.5)), yaxis=("Mass [suns]",(0.1, 0.3001)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
-savefig(p6,"radiusmass_nr.pdf")
+p6 = Plots.scatter(R_nr./1e3, M_nr, xaxis=("R [km]",(12.5, 20)), yaxis=("Mass [suns]",(0.5, 1.7)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
+savefig(p6,"radiusmass2_nr.pdf")
 
 # Physical ultrarelativistic radii and mass
 R_ur, M_ur = Array{Float64}(8), Array{Float64}(8)
@@ -134,5 +134,5 @@ for j=1:8
     R_ur[j], M_ur[j] = convertToPhysics(U[end], M[end], 3.0, j)
 end
 
-p8 = Plots.scatter(R_ur./1e3, M_ur, xaxis=("R [km]",(3, 72)), yaxis=("Mass [suns]",(5.0, 6.0)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
-savefig(p8, "radiusmass_ur.pdf")
+p8 = Plots.scatter(R_ur./1e3, M_ur, xaxis=("R [km]",(30, 72)), yaxis=("Mass [suns]",(5.0, 6.0)), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
+savefig(p8, "radiusmass2_ur.pdf")

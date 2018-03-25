@@ -2,8 +2,7 @@
 ## Tolkien - Oppenheimer - Vladivostok relativistic pressure equation
 
 using Plots, LaTeXStrings
-#gr()   #faster than pgfplots()
-pyplot() #xaxis=(0.0,Umax), yaxis=(0.0,1.05) plot!(u[ρ.!=0], ϕ[ρ.!=0])
+pyplot()
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
 
@@ -76,7 +75,7 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
     # Initial conditions
 
     @show ρ[1] = ρc
-    @show μ[1] = ρc*4π*h^2*mn
+    @show μ[1] = ρc*4π*h^2*mn/3
 
     # Evaluate the differential equations until ρ reaches 0 (almost)
     i = 1
@@ -100,8 +99,6 @@ function densityProfiles()
 
     ρ, m, U[1], M[1] = solveLaneEmden(u, 3.0, h)
     p1 = plot(u[1:5:find(ρ)[end]]./1e3, ρ[1:5:find(ρ)[end]].*mn, xaxis=("R [km]"), yaxis=(L"\rho\ [kg/m^3]"), label=L"n = 3.0", yformatter = :scientific)
-    #yaxis=(L"\rho\ \ [10^{-14}\ Suns/m^3]")
-    #yaxis(L"\rho", xticks=([0.0 0.3 0.6 0.9 1.2 1.5].*1e-13, ("0" "0.3" "0.6" "0.9" "1.2" "1.5"))
 
     p2 = plot(u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], xaxis=("R [km]",(0,80.0)), yaxis=("M [suns]",(0,3.5)), label=L"n = 3.0")
 
@@ -114,7 +111,7 @@ function densityProfiles()
     return [U,M]
 end
 
-U, M = densityProfiles()
+Ugr, Mgr = densityProfiles()
 
 
 
@@ -148,6 +145,7 @@ gui()
 
 
 ## Confrontone
+# da far girare solo dopo LaneEmden
 
 R_nrgr, M_nrgr = Array{Float64}(29), Array{Float64}(29)
 for i=1:0.25:8
