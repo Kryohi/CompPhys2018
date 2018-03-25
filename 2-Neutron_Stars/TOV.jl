@@ -2,8 +2,7 @@
 ## Tolkien - Oppenheimer - Vladivostok relativistic pressure equation
 
 using Plots, LaTeXStrings
-#gr()   #faster than pgfplots()
-pyplot() #xaxis=(0.0,Umax), yaxis=(0.0,1.05) plot!(u[ρ.!=0], ϕ[ρ.!=0])
+pyplot()
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 16), guidefont=Plots.font(fnt, 16), tickfont=Plots.font(fnt, 12), legendfont=Plots.font(fnt, 12))
 
@@ -76,7 +75,7 @@ function solveLaneEmden(u, n, h, gnam=1.0)  # n is the polytropic index, u the r
     # Initial conditions
 
     @show ρ[1] = ρc
-    @show μ[1] = ρc*4π*h^2*mn
+    @show μ[1] = ρc*4π*h^2*mn/3
 
     # Evaluate the differential equations until ρ reaches 0 (almost)
     i = 1
@@ -95,13 +94,16 @@ function densityProfiles()
     h = 0.1
     Umax = 90000.0  # maximum radius considered
     u = linspace(h, Umax, ceil(Umax/h))
+    Ms = 1.9885e30
+    mn = 1.674927351e-27 # neutron mass
 
     ρ, m, U[1], M[1] = solveLaneEmden(u, 3.0, h)
-    p1 = plot(u[1:5:find(ρ)[end]-1]./1e3, ρ[1:5:find(ρ)[end]-1]./1e42, xaxis=("R [km]"), ylab=L"\theta", label=L"n = 3.0")
-    p2 = plot(u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], xaxis=("R [km]",(0,8e4)), yaxis=("M",(0,3.5)), label=L"n = 3.0")
+    p1 = plot(u[1:5:find(ρ)[end]]./1e3, ρ[1:5:find(ρ)[end]].*mn, xaxis=("R [km]"), yaxis=(L"\rho\ [kg/m^3]"), label=L"n = 3.0", yformatter = :scientific)
+
+    p2 = plot(u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], xaxis=("R [km]",(0,80.0)), yaxis=("M [suns]",(0,3.5)), label=L"n = 3.0")
 
     ρ, m, U[2], M[2] = solveLaneEmden(u, 1.5, h)
-    plot!(p1, u[1:5:find(ρ)[end]]./1e3, ρ[1:5:find(ρ)[end]]./1e42, label=latexstring("n = 1.5"))
+    plot!(p1, u[1:5:find(ρ)[end]]./1e3, ρ[1:5:find(ρ)[end]].*mn, label=latexstring("n = 1.5"))
     plot!(p2, u[1:5:find(m)[end]]./1e3, m[1:5:find(m)[end]], label=latexstring("n = 1.5"))
     Plots.savefig(p1,"theta3_gr.pdf")
     Plots.savefig(p2,"mass3_profile_gr.pdf")
@@ -109,7 +111,7 @@ function densityProfiles()
     return [U,M]
 end
 
-U, M = densityProfiles()
+Ugr, Mgr = densityProfiles()
 
 
 
@@ -137,4 +139,46 @@ end
 
 p4 = Plots.scatter(R_urgr./1e3, M_urgr, xaxis=("R [km]"), yaxis=("Mass [suns]"), leg=false,m=(7,0.7,:blue,Plots.stroke(0)))
 savefig(p4, "radiusmass3_urgr.pdf")
+gui()
+
+
+
+
+## Confrontone
+# da far girare solo dopo LaneEmden
+
+R_nrgr, M_nrgr = Array{Float64}(29), Array{Float64}(29)
+for i=1:0.25:8
+    h = 0.1
+    Umax = 30000.0  # maximum radius considered
+    u = linspace(h, Umax, ceil(Umax/h))
+    _, __, R_nrgr[Int(i*4-3)], M_nrgr[Int(i*4-3)] = solveLaneEmden(u, 1.5, h, i)
+end
+
+R_urgr, M_urgr = Array{Float64}(29), Array{Float64}(29)
+for j=1:0.25:8
+    h = 0.1
+    Umax = 90000.0  # maximum radius considered
+    u = linspace(h, Umax, ceil(Umax/h))
+    _, __, R_urgr[Int(j*4)-3], M_urgr[Int(j*4)-3] = solveLaneEmden(u, 3.0, h, j)
+end
+
+# Physical nonrelativistic radii and mass
+R_nr, M_nr = Array{Float64}(29), Array{Float64}(29)
+for i=1:0.25:8
+    R_nr[Int(i*4)-3], M_nr[Int(i*4)-3] = convertToPhysics(U[1], M[1], 1.5, i)
+end
+
+# Physical ultrarelativistic radii and mass
+R_ur, M_ur = Array{Float64}(29), Array{Float64}(29)
+for j=1:0.25:8
+    R_ur[Int(j*4)-3], M_ur[Int(j*4)-3] = convertToPhysics(U[end], M[end], 3.0, j)
+end
+
+p5 = plot(R_urgr./1e3, M_urgr, xaxis=("R [km]",(0,80)), yaxis=("Mass [suns]", (0,8)), label=L"n = 3.0\ (TOV)", linewidth=2.5)
+plot!(p5, R_ur./1e3, M_ur, label=L"n = 3.0\ (LE)", linewidth=2.5)
+plot!(p5, R_nrgr./1e3, M_nrgr, label=L"n = 1.5\ (TOV)", linewidth=2.5)
+plot!(p5, R_nr./1e3, M_nr, label=L"n = 1.5\ (LE)", linewidth=2.5)
+
+savefig(p5, "confrontone.pdf")
 gui()
