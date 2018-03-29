@@ -272,6 +272,6 @@ function prettyPrint(L, rho, XX, VV, E, T, P, cm)
     M = length(P)
     println("\nPressure: ", mean(P[M÷4:end]), " ± ", std(P[M÷4:end]))
     println("Mean temperature: ", mean(T[M÷4:end]), " ± ", std(T[M÷4:end]))
-    println("Mean energy: ", mean(E[lM÷4:end]), " ± ", std(E[M÷4:end]))
+    println("Mean energy: ", mean(E[M÷4:end]), " ± ", std(E[M÷4:end]))
     println()
 end
