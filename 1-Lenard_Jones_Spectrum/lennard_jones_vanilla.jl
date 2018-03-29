@@ -133,8 +133,8 @@ function S(E::Float64, n::Int, γ, xMin=0.97, xMax=16.0)
     if length(X) >= 2
         #println("E = ", E, "; A^2 at boundaries: ", E - 4*(X[1]^-12 -X[1]^-6), "   ", E - 4*(X[2]^-12 - X[2]^-6))
         #println("\nBetween ", X[1]+1e-10, " and ", X[2]-1e-10, ":\n  S = ", γ*integrate(intgr, X[1]+1e-10, X[2]-1e-10) - n*π)
-        #return γ*integrate(intgr, X[1], X[end]) - n*π
-        return γ*quadgk(intgr, X[1], X[end], order=8, maxevals=10^8)[1] - n*π   #così si imbroglia però
+        return γ*integrate(intgr, X[1], X[end]) - n*π
+        #return γ*quadgk(intgr, X[1], X[end], order=8, maxevals=10^8)[1] - n*π   #così si imbroglia però
     else
         warn("Less than 2 zeros found, xout and/or xin are missing (", X, "  ", E, ")")
         return golden/42   # must be positive, because until veeeery small E, S(E) is still negative
