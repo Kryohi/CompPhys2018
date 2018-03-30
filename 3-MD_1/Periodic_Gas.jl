@@ -10,7 +10,7 @@
 # usare Measurements per variabili termodinamiche medie
 # provare Gadfly
 
-using Plots, LaTeXStrings, ProgressMeter, CSV
+using Plots, ProgressMeter, DataFrames, CSV
 pyplot(size = (1280, 1080))
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 18), guidefont=Plots.font(fnt, 18), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
@@ -45,7 +45,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
         next!(prog)
     end
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
-    anim && makeVideo(XX, N=N, T=T0, rho=rho)
+    anim && makeVideo(XX, T=T0, rho=rho)
 
     prettyPrint(L, rho, X, V, E, T, P, CM)
     return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
@@ -54,9 +54,9 @@ end
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
 # maxwell-boltzmann velocities
 function initializeSystem(N::Int, L, T)
-    Na = round(Int,∛(N/4)) # number of cells per dimension
+    Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
-    if Na - ∛(N/4) != 0
+    if Na - cbrt(N/4) != 0
         error("Can't make a cubic FCC crystal with this number of particles :(")
     end
 
@@ -227,7 +227,7 @@ function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=true)
     anim = @animate for i =1:size(M,2)
         Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
         if showCM   # add center of mass indicator
-            cm = CM(M[:,i])
+            cm = avg3D(M[:,i])
             scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
         end
         next!(prog) # increment the progress bar
@@ -278,3 +278,5 @@ function prettyPrint(L, rho, XX, VV, E, T, P, cm)
     println("Mean energy: ", mean(E[M÷4:end]), " ± ", std(E[M÷4:end]))
     println()
 end
+
+#XX, EE, TT, PP, CM = simulation(N=256, T0=0.5, rho=0.9, maxsteps=2*10^4, fstep=40, dt=2e-4, anim=true)

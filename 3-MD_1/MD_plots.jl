@@ -10,7 +10,8 @@ V = N./ρ
 
 # Use a small fstep for the PV plot, but higher (~50) to create the video
 @time for i = 1:length(ρ)
-    XX, EE, TT, PP, CM = simulation(N=108, T0=0.5, rho=ρ[i], maxsteps = 2*10^4, fstep = 10, dt=2e-4, csv=false)
+    println("Run ", i, "/", length(ρ))
+    XX, EE, TT, PP, CM = simulation(N=108, T0=0.5, rho=ρ[i], maxsteps=2*10^4, fstep=10, dt=2e-4, csv=false)
     P[i] = mean(PP[length(PP)÷4:end])  #+ ρ[i]*TT[length(PP)÷4:end])
     #pp = plot!(PP)
 end
