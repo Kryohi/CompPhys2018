@@ -56,9 +56,7 @@ end
 function initializeSystem(N::Int, L, T)
     Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
-    if Na - cbrt(N/4) != 0
-        error("Can't make a cubic FCC crystal with this number of particles :(")
-    end
+    !isapprox(Na, cbrt(N/4)) && error("Can't make a cubic FCC crystal with this N :(")
 
     X = Array{Float64}(3N)
     for i=0:Na-1, j=0:Na-1, k = 0:Na-1  # loop over every cell of the cfc lattice
@@ -279,4 +277,4 @@ function prettyPrint(L, rho, XX, VV, E, T, P, cm)
     println()
 end
 
-#XX, EE, TT, PP, CM = simulation(N=256, T0=0.5, rho=0.9, maxsteps=2*10^4, fstep=40, dt=2e-4, anim=true)
+#XX, EE, TT, PP, CM = simulation(N=108, T0=0.5, rho=0.9, maxsteps=2*10^4, fstep=40, dt=2e-4)
