@@ -1,11 +1,14 @@
 ## TODO
 # Capire discrepanza T calcolata e inizializzata
-# controllare mezzi in pressione, energia, temperatura etc
+# controllare mezzi in pressione, energia, temperatura
 # velocityverlet! con where{}
 # finire Prettyprint
 # parametro d'ordine
 # risolvere CM vagabondo (in realtà è abbastanza fermo)
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
+# aggiungere entropia, energia libera di Gibbs...
+# usare Measurements per variabili termodinamiche medie
+# provare Gadfly
 
 using Plots, LaTeXStrings, ProgressMeter, CSV
 pyplot(size = (1280, 1080))
@@ -175,12 +178,12 @@ end
 
 vpressure2(X,F,L) = sum(X.*F)/(3L^3)
 
-temperature(V) = sum(V.^2)/(length(V)/3)   # *m/3k se si usano quantità vere
+temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
 
 
 # creates an array with length N of gaussian distributed numbers, with σ = sigma
 function boxMuller(sigma, N::Int, x0=0.0)
-    #srand(42)   # sets the rng seed, to obtain reproducible numbers
+    srand(42)   # sets the rng seed, to obtain reproducible numbers
     c = Array{Float64}(N)
     for j = 1:round(Int,N/2)
         x1, x2 = rand(2)
@@ -190,7 +193,7 @@ function boxMuller(sigma, N::Int, x0=0.0)
     return c
 end
 function vecboxMuller(sigma, N::Int, x0=0.0) #should be ~50% faster
-    #srand(42)   # sets the rng seed, to obtain reproducible numbers
+    srand(42)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
@@ -272,6 +275,6 @@ function prettyPrint(L, rho, XX, VV, E, T, P, cm)
     M = length(P)
     println("\nPressure: ", mean(P[M÷4:end]), " ± ", std(P[M÷4:end]))
     println("Mean temperature: ", mean(T[M÷4:end]), " ± ", std(T[M÷4:end]))
-    println("Mean energy: ", mean(E[lM÷4:end]), " ± ", std(E[M÷4:end]))
+    println("Mean energy: ", mean(E[M÷4:end]), " ± ", std(E[M÷4:end]))
     println()
 end
