@@ -7,18 +7,18 @@
 # risolvere CM vagabondo (in realtà è abbastanza fermo)
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs...
-# usare Measurements per variabili termodinamiche medie
-# provare Gadfly
+# usare Measurements per variabili termodinamiche medie?
+# provare Gadfly master
 
 using Plots, ProgressMeter, DataFrames, CSV
 pyplot(size = (1280, 1080))
 fnt = "Source Sans Pro"
-default(titlefont=Plots.font(fnt, 18), guidefont=Plots.font(fnt, 18), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
+default(titlefont=Plots.font(fnt, 22), guidefont=Plots.font(fnt, 22), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
 
 # Main function, it creates the initial system, runs it through the Verlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 10^4, anim=false, csv=true, simonly=false)
+function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 10^4, anim=false, csv=true, onlyP=false)
 
     L = cbrt(N/rho)
     X, V = initializeSystem(N, L, T0)
@@ -33,13 +33,15 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     for n = 1:maxsteps
-        if !simonly && n%fstep == 1
+        if (n-1)%fstep == 0
             i = ceil(Int,n/fstep)
-            E[i] = energy(X,V,L)
             T[i] = temperature(V)
             P[i] = vpressure2(X,F,L) + T[i]*rho
-            #CM[3i-2:3i] = avg3D(X)
-            XX[:,i] = X
+            if !onlyP
+                E[i] = energy(X,V,L)
+                CM[3i-2:3i] = avg3D(X)
+                XX[:,i] = X
+            end
         end
         X, V, F = velocityVerlet(X, V, F, L, dt)
         next!(prog)
@@ -47,9 +49,14 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
-    prettyPrint(L, rho, X, V, E, T, P, CM)
+    prettyPrint(L, rho, E, T, P, CM)
     return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
 end
+
+
+## ----------------------------------
+## Initialization
+##
 
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
 # maxwell-boltzmann velocities
@@ -80,23 +87,24 @@ function initializeSystem(N::Int, L, T)
     return [X, V]
 end
 
-
-@inbounds function velocityVerlet(x, v, F, L, dt)
-    x_ = Array{Float64}(length(x))
-    @. x_ =  x + v*dt + F*dt^2/2
-    shiftSystem!(x_, L)
-    F_ = forces(x_,L)
-    @. v += (F + F_)*dt/2
-    return x_, v, F_
+# creates an array with length N of gaussian distributed numbers, with σ = sigma
+function vecboxMuller(sigma, N::Int, x0=0.0)
+    srand(68)   # sets the rng seed, to obtain reproducible numbers
+    x1 = rand(Int(N/2))
+    x2 = rand(Int(N/2))
+    @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
 end
-function velocityVerlet!(x::Array{T}, v::Array{T}, F::Array{T}, L::Float64, dt::Float64) where T #TEST
-    @. x += v*dt + F*dt^2/2
-    shiftSystem!(x, L)
-    F_ = forces(x,L)
-    @. v += (F + F_)*dt/2
-    return x, v, F_
-end # non ancora usato
 
+function shiftSystem!(A::Array{Float64,1}, L::Float64)
+    for j = 1:length(A)
+        @inbounds A[j] = A[j] - L*round(A[j]/L)
+    end
+end
+
+
+## ----------------------------------
+## Evolution
+##
 
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
@@ -129,10 +137,26 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
 end
 
 
-function avg3D(A::Array{Float64,1})
-    N = Int(length(A)/3)
-    return [sum(A[1:3:N-2])/N, sum(A[2:3:N-1])/N, sum(A[3:3:N])/N]
+@inbounds function velocityVerlet(x, v, F, L, dt)
+    x_ = Array{Float64}(length(x))
+    @. x_ =  x + v*dt + F*dt^2/2
+    shiftSystem!(x_, L)
+    F_ = forces(x_,L)
+    @. v += (F + F_)*dt/2
+    return x_, v, F_
 end
+function velocityVerlet!(x::Array{T}, v::Array{T}, F::Array{T}, L::Float64, dt::Float64) where T #TEST, TODO
+    @. x += v*dt + F*dt^2/2
+    shiftSystem!(x, L)
+    F_ = forces(x,L)
+    @. v += (F + F_)*dt/2
+    return x, v, F_
+end # non ancora usato
+
+
+## ----------------------------------
+## Thermodinamic Properties
+##
 
 function energy(r,v,L)
     T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
@@ -174,33 +198,13 @@ function vpressure(r,L) # non usato e probabilmente sbagliato
     return P/(6L^3) # *2?
 end
 
-vpressure2(X,F,L) = sum(X.*F)/(3L^3)
+@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
 
-temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
+@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
 
-
-# creates an array with length N of gaussian distributed numbers, with σ = sigma
-function boxMuller(sigma, N::Int, x0=0.0)
-    srand(42)   # sets the rng seed, to obtain reproducible numbers
-    c = Array{Float64}(N)
-    for j = 1:round(Int,N/2)
-        x1, x2 = rand(2)
-        c[j*2] = sqrt(-2sigma*log(1-x1))*cos(2π*x2)
-        c[j*2-1] = sqrt(-2sigma*log(1-x2))*sin(2π*x1)
-    end
-    return c
-end
-function vecboxMuller(sigma, N::Int, x0=0.0) #should be ~50% faster
-    srand(42)   # sets the rng seed, to obtain reproducible numbers
-    x1 = rand(Int(N/2))
-    x2 = rand(Int(N/2))
-    @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
-end
-
-function shiftSystem!(A::Array{Float64,1}, L::Float64)
-    for j = 1:length(A)
-        @inbounds A[j] = A[j] - L*round(A[j]/L)
-    end
+function avg3D(A::Array{Float64,1})
+    N = Int(length(A)/3)
+    return [sum(A[1:3:N-2])/N, sum(A[2:3:N-1])/N, sum(A[3:3:N])/N]
 end
 
 # fare attenzione a non prendere particella vicino ai bordi
@@ -212,6 +216,10 @@ function lindemann(X0, XX, N, rho)   # where X0 is a triplet at t=0, XX the hyst
     return deltaX*2/a
 end
 
+
+## ----------------------------------
+## Visualization
+##
 
 # makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
 # don't run this with more than ~1000 frames unless you have a lot of spare time...
@@ -233,13 +241,6 @@ function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=true)
     file = string("./3-MD_1/Video/LJ",N,"_T",T,"_d",rho,".mp4")
     mp4(anim, file, fps = fps)
     gui() #show the last frame in a separate window
-end
-
-function saveCSV(M; N="???", T="???", rho="???")
-    D = convert(DataFrame, M)
-    file = string("./3-MD_1/Data/LJ",N,"_T",T,"_d",rho,".csv")
-    CSV.write(file, D)
-    info("System saved in ", file)
 end
 
 function make3Dplot(A::Array{Float64}, rho=-1.0)
@@ -269,12 +270,25 @@ function make2DtemporalPlot(M::Array{Float64,2}, rho)
     gui()
 end
 
-function prettyPrint(L, rho, XX, VV, E, T, P, cm)
-    M = length(P)
-    println("\nPressure: ", mean(P[M÷4:end]), " ± ", std(P[M÷4:end]))
-    println("Mean temperature: ", mean(T[M÷4:end]), " ± ", std(T[M÷4:end]))
-    println("Mean energy: ", mean(E[M÷4:end]), " ± ", std(E[M÷4:end]))
+
+## ----------------------------------
+## Miscellaneous
+##
+
+function saveCSV(M; N="???", T="???", rho="???")
+    D = convert(DataFrame, M)
+    file = string("./3-MD_1/Data/positions_",N,"_T",T,"_d",rho,".csv")
+    CSV.write(file, D)
+    info("System saved in ", file)
+end
+
+function prettyPrint(L, rho, E, T, P, cm)
+    l = length(P)
+    println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
+    println("Mean temperature: ", mean(T[l÷3:end]), " ± ", std(T[l÷3:end])/sqrt(l*2/3))
+    println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
     println()
 end
+
 
 #XX, EE, TT, PP, CM = simulation(N=108, T0=0.5, rho=0.9, maxsteps=2*10^4, fstep=40, dt=2e-4)
