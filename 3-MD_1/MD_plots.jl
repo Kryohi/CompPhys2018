@@ -9,19 +9,24 @@ end
 
 ## Grafico PV
 XX, EE, TT, PP = AbstractArray, AbstractArray, AbstractArray, AbstractArray
-N = 256
-ρ = 0.05:0.02:2.0
+N = 108
+ρ = 0.1:0.1:2.0
 P, dP = zeros(ρ), zeros(ρ)
+E, dE = zeros(ρ), zeros(ρ)
+T, dT = zeros(ρ), zeros(ρ)
 T0 = 0.5
 V = N./ρ
 
-# Use a small fstep for the PV plot, but higher (~50) to create the video
+# Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the video
 @time for i = 1:length(ρ)
     println("Run ", i, "/", length(ρ))
-    _, _, TT, PP, = simulation(N=N, T0=T0, rho=ρ[i], maxsteps=3*10^4, fstep=1, dt=2e-4, onlyP=true, csv=true)
+    XX, EE, TT, PP, = simulation(N=N, T0=T0, rho=ρ[i], maxsteps=15*10^3, fstep=30, dt=2e-4, anim=false, csv=true)
     P[i], dP[i] = averageAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
-    #pp = plot!(PP)
+    E[i], dE[i] = averageAtEquilibrium(EE)
+    T[i], dT[i] = averageAtEquilibrium(TT)
+    make2DtemporalPlot(XX, T=T0, rho=ρ[i], save=true)
 end
+
 DP = convert(DataFrame, [V P])
 file = string("./3-MD_1/Data/PV_",N,"_T",T0,".csv")
 CSV.write(file, DP)

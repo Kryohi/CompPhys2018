@@ -11,9 +11,14 @@
 # provare Gadfly master
 
 using Plots, ProgressMeter, DataFrames, CSV
-pyplot(size = (1280, 1080))
+pyplot()
 fnt = "Source Sans Pro"
 default(titlefont=Plots.font(fnt, 22), guidefont=Plots.font(fnt, 22), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
+
+# create missing directories in current folder
+any(x->x=="Data", readdir("./")) || mkdir("Data")
+any(x->x=="Plots", readdir("./")) || mkdir("Plots")
+any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs it through the Verlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
@@ -34,7 +39,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     for n = 1:maxsteps
         if (n-1)%fstep == 0
-            i = ceil(Int,n/fstep)
+            i = cld(n,fstep)    # "Smallest integer larger than or equal to n/fstep"
             T[i] = temperature(V)
             P[i] = vpressure2(X,F,L) + T[i]*rho
             if !onlyP
@@ -46,10 +51,11 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
         X, V, F = velocityVerlet(X, V, F, L, dt)
         next!(prog)
     end
+
+    prettyPrint(L, rho, E, T, P, CM)
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
-    prettyPrint(L, rho, E, T, P, CM)
     return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
 end
 
@@ -99,6 +105,7 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     for j = 1:length(A)
         @inbounds A[j] = A[j] - L*round(A[j]/L)
     end
+    nothing
 end
 
 
@@ -109,12 +116,12 @@ end
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
 
-@inbounds function forces(r::Array{Float64,1}, L::Float64)
+function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
     # multithreading is convenient only for large N
-    # to set the number of threads use the environment variable JULIA_NUM_THREADS=4
+    # to set the number of threads use the environment variable JULIA_NUM_THREADS=4, or go to settings in Atom
     Threads.@threads for l=1:Int(length(r)/3)-1
-        for i=0:l-1
+        @inbounds @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
@@ -123,7 +130,8 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                dV = -der_LJ(sqrt(dr2))
+                #dV = -der_LJ(sqrt(dr2))
+                dV = -24*dr2^-4 + 48*dr2^-7
                 F[3l+1] += dV*dx
                 F[3l+2] += dV*dy
                 F[3l+3] += dV*dz
@@ -163,7 +171,7 @@ function energy(r,v,L)
     V = 0.0
     @inbounds for l=1:Int(length(r)/3)-1
         T += (v[3l+1]^2 + v[3l+2]^2 + v[3l+3]^2)./2
-        for i=0:l-1
+        @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
@@ -178,6 +186,10 @@ function energy(r,v,L)
     end
     return T+V
 end
+
+@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
+
+@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
 
 function vpressure(r,L) # non usato e probabilmente sbagliato
     P = 0.0
@@ -198,13 +210,9 @@ function vpressure(r,L) # non usato e probabilmente sbagliato
     return P/(6L^3) # *2?
 end
 
-@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
-
-@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
-
 function avg3D(A::Array{Float64,1})
     N = Int(length(A)/3)
-    return [sum(A[1:3:N-2])/N, sum(A[2:3:N-1])/N, sum(A[3:3:N])/N]
+    return [sum(A[1:3:N-2]), sum(A[2:3:N-1]), sum(A[3:3:N])]./N
 end
 
 # fare attenzione a non prendere particella vicino ai bordi
@@ -223,10 +231,11 @@ end
 
 # makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
 # don't run this with more than ~1000 frames unless you have a lot of spare time...
-function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=true)
+function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=false)
     close("all")
+    Plots.default(size=(1280,1080))
     N = Int(size(M,1)/3)
-    L = cbrt(N/rho)
+    rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
     println("\nI'm cooking pngs to make a nice video. It will take some time...")
     prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
 
@@ -238,12 +247,13 @@ function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=true)
         end
         next!(prog) # increment the progress bar
     end
-    file = string("./3-MD_1/Video/LJ",N,"_T",T,"_d",rho,".mp4")
+    file = string("./Video/LJ",N,"_T",T,"_d",rho,".mp4")
     mp4(anim, file, fps = fps)
     gui() #show the last frame in a separate window
 end
 
-function make3Dplot(A::Array{Float64}, rho=-1.0)
+function make3Dplot(A::Array{Float64}, T= -1.0, rho=-1.0)
+    Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false)
@@ -254,7 +264,8 @@ function make3Dplot(A::Array{Float64}, rho=-1.0)
     gui()
 end
 
-function make2DtemporalPlot(M::Array{Float64,2}, rho)
+function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
+    Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
@@ -267,6 +278,8 @@ function make2DtemporalPlot(M::Array{Float64,2}, rho)
     for i =2:size(M,2)
         scatter!(M[3I+-1,i], M[3I,i], m=(7,0.1,:blue,Plots.stroke(0)))
     end
+    file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
+    save && savefig(file)
     gui()
 end
 
@@ -277,7 +290,7 @@ end
 
 function saveCSV(M; N="???", T="???", rho="???")
     D = convert(DataFrame, M)
-    file = string("./3-MD_1/Data/positions_",N,"_T",T,"_d",rho,".csv")
+    file = string("./Data/positions_",N,"_T",T,"_d",rho,".csv")
     CSV.write(file, D)
     info("System saved in ", file)
 end
@@ -291,4 +304,4 @@ function prettyPrint(L, rho, E, T, P, cm)
 end
 
 
-#XX, EE, TT, PP, CM = simulation(N=108, T0=0.5, rho=0.9, maxsteps=2*10^4, fstep=40, dt=2e-4)
+#@time XX, EE, TT, PP, = simulation(N=108, T0=0.5, rho=1.6, maxsteps=15*10^3, fstep=30, dt=2e-4, csv=true, anim=true)
