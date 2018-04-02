@@ -1,19 +1,20 @@
 ## TODO
-# Capire discrepanza T calcolata e inizializzata
+# Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
 # controllare mezzi in pressione, energia, temperatura
 # velocityverlet! con where{}
-# finire Prettyprint
 # parametro d'ordine
-# risolvere CM vagabondo (in realtà è abbastanza fermo)
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs...
 # usare Measurements per variabili termodinamiche medie?
 # provare Gadfly master
+# 3D temporal plot
+# 2D temporal plot più esteso
 
-using Plots, ProgressMeter, DataFrames, CSV
+@everywhere using Plots, ProgressMeter, DataFrames, CSV
 pyplot()
-fnt = "Source Sans Pro"
-default(titlefont=Plots.font(fnt, 22), guidefont=Plots.font(fnt, 22), tickfont=Plots.font(fnt, 14), legendfont=Plots.font(fnt, 14))
+PyPlot.PyObject(PyPlot.axes3D)
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
 # create missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -23,7 +24,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # Main function, it creates the initial system, runs it through the Verlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 10^4, anim=false, csv=true, onlyP=false)
+@everywhere function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 10^4, anim=false, csv=true, onlyP=false)
 
     L = cbrt(N/rho)
     X, V = initializeSystem(N, L, T0)
@@ -66,7 +67,7 @@ end
 
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
 # maxwell-boltzmann velocities
-function initializeSystem(N::Int, L, T)
+@everywhere function initializeSystem(N::Int, L, T)
     Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
     !isapprox(Na, cbrt(N/4)) && error("Can't make a cubic FCC crystal with this N :(")
@@ -81,27 +82,27 @@ function initializeSystem(N::Int, L, T)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    σ = sqrt(T)     #  in qualche unità di misura
+    σ = sqrt(T)/3     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
-    #@show temperature(V)
+    @show temperature(V)
     # force the average velocity to 0
-    V[1:3:N-2] -= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perch T cambia
-    V[2:3:N-1] -= 3*sum(V[2:3:N-1])/N
-    V[3:3:N] -= 3*sum(V[3:3:N])/N
-    #@show [sum(V[1:3:N-2])/N, sum(V[2:3:N-1])/N, sum(V[3:3:N])/N]
+    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
+    V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
+    V[3:3:N] .-= 3*sum(V[3:3:N])/N
+    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]
     #@show temperature(V)
     return [X, V]
 end
 
 # creates an array with length N of gaussian distributed numbers, with σ = sigma
-function vecboxMuller(sigma, N::Int, x0=0.0)
-    srand(68)   # sets the rng seed, to obtain reproducible numbers
+@everywhere function vecboxMuller(sigma, N::Int, x0=0.0)
+    srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
 end
 
-function shiftSystem!(A::Array{Float64,1}, L::Float64)
+@everywhere function shiftSystem!(A::Array{Float64,1}, L::Float64)
     for j = 1:length(A)
         @inbounds A[j] = A[j] - L*round(A[j]/L)
     end
@@ -113,14 +114,14 @@ end
 ## Evolution
 ##
 
-LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
-der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
+@everywhere LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
+@everywhere der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
 
-function forces(r::Array{Float64,1}, L::Float64)
+@everywhere function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
     # multithreading is convenient only for large N
     # to set the number of threads use the environment variable JULIA_NUM_THREADS=4, or go to settings in Atom
-    Threads.@threads for l=1:Int(length(r)/3)-1
+    for l=0:Int(length(r)/3)-1
         @inbounds @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -145,28 +146,20 @@ function forces(r::Array{Float64,1}, L::Float64)
 end
 
 
-@inbounds function velocityVerlet(x, v, F, L, dt)
-    x_ = Array{Float64}(length(x))
-    @. x_ =  x + v*dt + F*dt^2/2
-    shiftSystem!(x_, L)
-    F_ = forces(x_,L)
-    @. v += (F + F_)*dt/2
-    return x_, v, F_
-end
-function velocityVerlet!(x::Array{T}, v::Array{T}, F::Array{T}, L::Float64, dt::Float64) where T #TEST, TODO
+@everywhere @inbounds function velocityVerlet(x, v, F, L, dt)
     @. x += v*dt + F*dt^2/2
     shiftSystem!(x, L)
     F_ = forces(x,L)
     @. v += (F + F_)*dt/2
     return x, v, F_
-end # non ancora usato
+end
 
 
 ## ----------------------------------
 ## Thermodinamic Properties
 ##
 
-function energy(r,v,L)
+@everywhere function energy(r,v,L)
     T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
     V = 0.0
     @inbounds for l=1:Int(length(r)/3)-1
@@ -187,9 +180,9 @@ function energy(r,v,L)
     return T+V
 end
 
-@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
+@everywhere @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
 
-@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
+@everywhere @fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
 
 function vpressure(r,L) # non usato e probabilmente sbagliato
     P = 0.0
@@ -264,7 +257,7 @@ function make3Dplot(A::Array{Float64}, T= -1.0, rho=-1.0)
     gui()
 end
 
-function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
+@everywhere function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
     L = cbrt(N/rho)
@@ -276,7 +269,7 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     # now the X indices of M in the choosen plane are 3I-2
     scatter(M[3I-1,1], M[3I,1], m=(7,0.7,:red,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), leg=false)
     for i =2:size(M,2)
-        scatter!(M[3I+-1,i], M[3I,i], m=(7,0.1,:blue,Plots.stroke(0)))
+        scatter!(M[3I+-1,i], M[3I,i], m=(7,0.05,:blue,Plots.stroke(0)))
     end
     file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
     save && savefig(file)
@@ -288,20 +281,24 @@ end
 ## Miscellaneous
 ##
 
-function saveCSV(M; N="???", T="???", rho="???")
+@everywhere function saveCSV(M; N="???", T="???", rho="???")
     D = convert(DataFrame, M)
     file = string("./Data/positions_",N,"_T",T,"_d",rho,".csv")
     CSV.write(file, D)
     info("System saved in ", file)
 end
 
-function prettyPrint(L, rho, E, T, P, cm)
+@everywhere function prettyPrint(L, rho, E, T, P, cm)
     l = length(P)
     println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
     println("Mean temperature: ", mean(T[l÷3:end]), " ± ", std(T[l÷3:end])/sqrt(l*2/3))
     println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
+    println("Mean center of mass: [", mean(cm[l÷3:3:end-2]), ", ", mean(cm[l÷3+1:3:end-1]), ", ", mean(cm[l÷3+2:3:end]))
     println()
 end
 
 
-#@time XX, EE, TT, PP, = simulation(N=108, T0=0.5, rho=1.6, maxsteps=15*10^3, fstep=30, dt=2e-4, csv=true, anim=true)
+# @time XX, EE, TT, PP, CV = simulation(N=256, T0=0.5, rho=1.5, maxsteps=1*10^5, fstep=100, dt=5e-4, anim=false)
+#
+# plot(CV[1:3:end-2])
+# gui()
