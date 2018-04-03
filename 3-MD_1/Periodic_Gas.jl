@@ -14,6 +14,9 @@ module Sim
 
 using Plots, ProgressMeter, DataFrames, CSV
 pyplot()
+PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -81,7 +84,7 @@ function initializeSystem(N::Int, L, T)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    σ = sqrt(T)/3     #  in qualche unità di misura
+    σ = sqrt(T)     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
     @show temperature(V)
     # force the average velocity to 0
@@ -268,7 +271,7 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     # now the X indices of M in the choosen plane are 3I-2
     scatter(M[3I-1,1], M[3I,1], m=(7,0.7,:red,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), leg=false)
     for i =2:size(M,2)
-        scatter!(M[3I+-1,i], M[3I,i], m=(7,0.05,:blue,Plots.stroke(0)))
+        scatter!(M[3I-1,i], M[3I,i], m=(7,0.05,:blue,Plots.stroke(0)))
     end
     file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
     save && savefig(file)
@@ -292,7 +295,7 @@ function prettyPrint(L, rho, E, T, P, cm)
     println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
     println("Mean temperature: ", mean(T[l÷3:end]), " ± ", std(T[l÷3:end])/sqrt(l*2/3))
     println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
-    println("Mean center of mass: [", mean(cm[l÷3:3:end-2]), ", ", mean(cm[l÷3+1:3:end-1]), ", ", mean(cm[l÷3+2:3:end]))
+    println("Mean center of mass: [", mean(cm[l÷3:3:end-2]), ", ", mean(cm[l÷3+1:3:end-1]), ", ", mean(cm[l÷3+2:3:end]), "]")
     println()
 end
 
