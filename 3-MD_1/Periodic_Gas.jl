@@ -3,11 +3,9 @@ module Sim
 ## TODO
 # Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
 # controllare mezzi in pressione, energia, temperatura
-# velocityverlet! con where{}
 # parametro d'ordine
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs...
-# usare Measurements per variabili termodinamiche medie?
 # provare Gadfly master
 # 3D temporal plot
 # 2D temporal plot più esteso
@@ -44,7 +42,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # "Smallest integer larger than or equal to n/fstep"
             T[i] = temperature(V)
-            P[i] = vpressure2(X,F,L) + T[i]*rho
+            P[i] = vpressure(X,L) + T[i]*rho
             if !onlyP
                 E[i] = energy(X,V,L)
                 CM[3i-2:3i] = avg3D(X)
@@ -196,9 +194,9 @@ function vpressure(r,L) # non usato e probabilmente sbagliato
             dy = dy - L*round(dy/L)
             dz = r[3l+3] - r[3i+3]
             dz = dz - L*round(dz/L)
-            dr = sqrt(dx^2 + dy^2 + dz^2)
-            if dr < L/2
-                P += der_LJ(dr)*dr^2
+            dr2 = dx^2 + dy^2 + dz^2
+            if dr2 < L*L/4
+                P += der_LJ(dr2)*dr2
             end
         end
     end
