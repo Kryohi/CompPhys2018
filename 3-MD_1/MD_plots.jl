@@ -21,7 +21,7 @@ end
 
 @everywhere function parallelPV(rho, N, T0)
     # Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the animation
-    println("Run ", rho, "/", 3.4)
+    println("Run ", rho, "/", 3.5)
     XX, EE, TT, PP, = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, csv=false, onlyP=false)
     P, dP = avgAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
     E, dE = avgAtEquilibrium(EE)
@@ -35,8 +35,8 @@ end
 ##
 
 ρ = [0.05:0.025:1.0; 1.05:0.05:1.95; 2.0:0.1:3.5]
-ρ = 0.01:0.05:3.0
-N = 32
+ρ = 0.01:0.1:3.0
+N = 108
 T0 = 0.5
 V = N./ρ
 
@@ -61,4 +61,4 @@ gui()
 
 
 ## prove varie
-#XX, EE, TT, PP, CM = Sim.simulation(N=32, T0=0.5, rho=0.01, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false)
+XX, EE, TT, PP, CM = Sim.simulation(N=108, T0=0.5, rho=0.01, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, save=false)

@@ -8,7 +8,7 @@ module Sim
 # aggiungere entropia, energia libera di Gibbs...
 # provare Gadfly master
 # 3D temporal plot
-# 2D temporal plot più esteso
+# migliorare visualizzazione avanzamento con pmap (?)
 
 using Plots, ProgressMeter, DataFrames, CSV
 pyplot()
@@ -20,6 +20,7 @@ default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plo
 any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
+
 
 # Main function, it creates the initial system, runs it through the Verlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
@@ -42,7 +43,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # "Smallest integer larger than or equal to n/fstep"
             T[i] = temperature(V)
-            P[i] = vpressure(X,L) + T[i]*rho
+            P[i] = vpressure2(X,F,L) + T[i]*rho
             if !onlyP
                 E[i] = energy(X,V,L)
                 CM[3i-2:3i] = avg3D(X)
@@ -61,7 +62,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
 end
 
 
-## ----------------------------------
+## -------------------------------------
 ## Initialization
 ##
 
@@ -103,24 +104,23 @@ function vecboxMuller(sigma, N::Int, x0=0.0)
 end
 
 function shiftSystem!(A::Array{Float64,1}, L::Float64)
-    for j = 1:length(A)
-        @inbounds A[j] = A[j] - L*round(A[j]/L)
+    @inbounds for j = 1:length(A)
+        A[j] = A[j] - L*round(A[j]/L)
     end
     nothing
 end
 
 
-## ----------------------------------
+## -------------------------------------
 ## Evolution
 ##
 
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
-der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)
+der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 
 function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
-    # multithreading is convenient only for large N
-    # to set the number of threads use the environment variable JULIA_NUM_THREADS=4, or go to settings in Atom
+
     for l=0:Int(length(r)/3)-1
         @inbounds @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
@@ -155,7 +155,7 @@ end
 end
 
 
-## ----------------------------------
+## -------------------------------------
 ## Thermodinamic Properties
 ##
 
@@ -182,12 +182,12 @@ end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
 
-@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)
+@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ultraortodosso ma più veloce
 
 function vpressure(r,L) # non usato e probabilmente sbagliato
     P = 0.0
-    for l=1:Int(length(r)/3)-1
-        @inbounds for i=0:l-1
+    @fastmath @inbounds for l=1:Int(length(r)/3)-1
+        for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
@@ -196,11 +196,11 @@ function vpressure(r,L) # non usato e probabilmente sbagliato
             dz = dz - L*round(dz/L)
             dr2 = dx^2 + dy^2 + dz^2
             if dr2 < L*L/4
-                P += der_LJ(dr2)*dr2
+                P += der_LJ(sqrt(dr2))*dr2
             end
         end
     end
-    return P/(6L^3) # *2?
+    return -P/(6L^3)
 end
 
 function avg3D(A::Array{Float64,1})
@@ -218,7 +218,7 @@ function lindemann(X0, XX, N, rho)   # where X0 is a triplet at t=0, XX the hyst
 end
 
 
-## ----------------------------------
+## -------------------------------------
 ## Visualization
 ##
 
@@ -277,7 +277,7 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
 end
 
 
-## ----------------------------------
+## -------------------------------------
 ## Miscellaneous
 ##
 
