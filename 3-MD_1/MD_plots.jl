@@ -1,37 +1,64 @@
 
-include("./Periodic_Gas.jl")
-pyplot(size = (800, 600))
+if nprocs()<4
+  addprocs(4)   # add local worker processes (where N is the number of logical cores)
+end
 
-function averageAtEquilibrium(A, f=3)   # where f is the fraction of steps to cut off
+push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
+@everywhere include(string(pwd(), "/Periodic_Gas.jl"))
+#@everywhere reload("Sim")
+@everywhere import Sim  # add module with all the functions in Perodic_Gas.jl
+
+@everywhere using Plots, DataFrames
+pyplot(size = (800, 600))
+PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
+
+@everywhere function avgAtEquilibrium(A, f=3)   # where f is the fraction of steps to cut off
     l = length(A)
     return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
 end
 
+@everywhere function parallelPV(rho, N, T0)
+    # Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the animation
+    println("Run ", rho, "/", 3.5)
+    XX, EE, TT, PP, = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, csv=false, onlyP=false)
+    P, dP = avgAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
+    E, dE = avgAtEquilibrium(EE)
+    T, dT = avgAtEquilibrium(TT)
+    #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
+    return P, dP, E, dE, T, dT
+end
+
+##
 ## Grafico PV
-XX, EE, TT, PP = AbstractArray, AbstractArray, AbstractArray, AbstractArray
+##
+
+ρ = [0.05:0.025:1.0; 1.05:0.05:1.95; 2.0:0.1:3.5]
+ρ = 0.01:0.1:3.0
 N = 108
-ρ = 0.1:0.1:2.0
-P, dP = zeros(ρ), zeros(ρ)
-E, dE = zeros(ρ), zeros(ρ)
-T, dT = zeros(ρ), zeros(ρ)
 T0 = 0.5
 V = N./ρ
 
-# Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the video
-@time for i = 1:length(ρ)
-    println("Run ", i, "/", length(ρ))
-    XX, EE, TT, PP, = simulation(N=N, T0=T0, rho=ρ[i], maxsteps=15*10^3, fstep=30, dt=2e-4, anim=false, csv=true)
-    P[i], dP[i] = averageAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
-    E[i], dE[i] = averageAtEquilibrium(EE)
-    T[i], dT[i] = averageAtEquilibrium(TT)
-    make2DtemporalPlot(XX, T=T0, rho=ρ[i], save=true)
-end
+@time result = pmap(rho -> parallelPV(rho, N, T0), ρ)
+P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
+E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
+T, dT = [ x[5] for x in result ], [ x[6] for x in result ]
 
-DP = convert(DataFrame, [V P])
-file = string("./3-MD_1/Data/PV_",N,"_T",T0,".csv")
+DP = convert(DataFrame, [ρ V P])
+file = string("./Data/PV_",N,"_T",T0,".csv")
 CSV.write(file, DP)
 
-PV1 = plot(V, P, ribbon=dP, fillalpha=.3, xaxis=("V",(0,2250)), yaxis=("P",(0,5)),  linewidth=2, leg=false)
-savefig(PV1,"PV256_0.5_005to2.pdf")
-#PV1 = plot(ρ, P, xaxis=("ρ",(0,2.0)), yaxis=("P",(0,5)),  linewidth=2, leg=false)
+rV1 = plot(ρ, P, ribbon=dP, xaxis=("ρ",(0,ρ[end])), yaxis=("P",(0,ceil(P[end]))), linewidth=2, leg=false)
+file = string("./Plots/rV_",N,"_T",T0,".pdf")
+savefig(rV1,file)
+
+PV1 = plot(V, P, ribbon=dP, fillalpha=.3, xaxis=("V",(0,2500)), yaxis=("P",(0,ceil(P[end]))), linewidth=2, leg=false)
+file = string("./Plots/PV_",N,"_T",T0,".pdf")
+savefig(PV1,file)
+
 gui()
+
+
+## prove varie
+XX, EE, TT, PP, CM = Sim.simulation(N=108, T0=0.5, rho=0.01, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, save=false)
