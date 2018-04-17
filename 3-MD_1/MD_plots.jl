@@ -3,12 +3,12 @@ if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
 
+using Plots, DataFrames, ProgressMeter, CSV, PyCall
 push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/Periodic_Gas.jl"))
 #@everywhere reload("Sim")
 @everywhere import Sim  # add module with all the functions in Perodic_Gas.jl
 
-@everywhere using Plots, DataFrames
 pyplot(size = (800, 600))
 PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
 fnt = "sans-serif"
@@ -22,7 +22,7 @@ end
 @everywhere function parallelPV(rho, N, T0)
     # Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the animation
     println("Run ", rho, "/", 3.5)
-    XX, EE, TT, PP, = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, csv=false, onlyP=false)
+    XX, EE, TT, PP, CV = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, csv=false, onlyP=false)
     P, dP = avgAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
     E, dE = avgAtEquilibrium(EE)
     T, dT = avgAtEquilibrium(TT)
@@ -35,9 +35,9 @@ end
 ##
 
 ρ = [0.05:0.025:1.0; 1.05:0.05:1.95; 2.0:0.1:3.5]
-ρ = 0.01:0.1:3.0
+ρ = 0.05:0.05:1.2
 N = 108
-T0 = 0.5
+T0 = 3.0
 V = N./ρ
 
 @time result = pmap(rho -> parallelPV(rho, N, T0), ρ)
@@ -49,7 +49,7 @@ DP = convert(DataFrame, [ρ V P])
 file = string("./Data/PV_",N,"_T",T0,".csv")
 CSV.write(file, DP)
 
-rV1 = plot(ρ, P, ribbon=dP, xaxis=("ρ",(0,ρ[end])), yaxis=("P",(0,ceil(P[end]))), linewidth=2, leg=false)
+rV1 = plot(ρ, P, ribbon=dP, fillalpha=.3, xaxis=("ρ",(0,ρ[end])), yaxis=("P",(0,ceil(P[end]))), linewidth=2, leg=false)
 file = string("./Plots/rV_",N,"_T",T0,".pdf")
 savefig(rV1,file)
 
@@ -61,4 +61,4 @@ gui()
 
 
 ## prove varie
-XX, EE, TT, PP, CM = Sim.simulation(N=108, T0=0.5, rho=0.01, maxsteps=1*10^5, fstep=5, dt=5e-4, anim=false, save=false)
+XX, EE, TT, PP, CV = Sim.simulation(N=32, T0=1.0, rho=0.5, maxsteps=1*10^5, fstep=10, dt=5e-4, anim=false, csv=true)
