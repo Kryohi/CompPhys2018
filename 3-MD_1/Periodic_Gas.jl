@@ -1,11 +1,12 @@
 module Sim
 
 ## TODO
+# Capire discrepanza formule pressione
 # Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
 # controllare mezzi in pressione, energia, temperatura
 # parametro d'ordine
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
-# aggiungere entropia, energia libera di Gibbs...
+# aggiungere entropia, energia libera di Gibbs (si può?)
 # provare Gadfly master
 # 3D temporal plot
 # migliorare visualizzazione avanzamento con pmap (?)
@@ -22,10 +23,10 @@ any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 
-# Main function, it creates the initial system, runs it through the Verlet algorithm for maxsteps,
+# Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 10^4, anim=false, csv=true, onlyP=false)
+function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, anim=false, csv=true, onlyP=false)
 
     L = cbrt(N/rho)
     X, V = initializeSystem(N, L, T0)
@@ -39,14 +40,14 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt = 1e-4, fstep = 50, maxsteps = 
     println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
-    for n = 1:maxsteps
+    @inbounds for n = 1:maxsteps
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # "Smallest integer larger than or equal to n/fstep"
             T[i] = temperature(V)
-            P[i] = vpressure2(X,F,L) + T[i]*rho
+            P[i] = T[i]*rho + vpressure2(X,F,L)
             if !onlyP
                 E[i] = energy(X,V,L)
-                CM[3i-2:3i] = avg3D(X)
+                CM[3i-2:3i] = avg3D(V)
                 XX[:,i] = X
             end
         end
@@ -85,17 +86,18 @@ function initializeSystem(N::Int, L, T)
     shiftSystem!(X,L)
     σ = sqrt(T)     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
-    @show temperature(V)
+    @show temperature2(V)
     # force the average velocity to 0
     V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
     V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
-    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]
-    #@show temperature(V)
+    @show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]
+    @show avg3D(X)
+    @show temperature2(V)
     return [X, V]
 end
 
-# creates an array with length N of gaussian distributed numbers, with σ = sigma
+# creates an array with length N of gaussian distributed numbers using Box-Muller
 function vecboxMuller(sigma, N::Int, x0=0.0)
     srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
@@ -181,12 +183,13 @@ function energy(r,v,L)
 end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
+@fastmath @inbounds temperature2(V) = sum(V.^2)   # *m/k se si usano quantità vere
 
 @fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ultraortodosso ma più veloce
 
-function vpressure(r,L) # non usato e probabilmente sbagliato
+function vpressure(r,L)
     P = 0.0
-    @fastmath @inbounds for l=1:Int(length(r)/3)-1
+    @inbounds for l=1:Int(length(r)/3)-1
         for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -200,7 +203,7 @@ function vpressure(r,L) # non usato e probabilmente sbagliato
             end
         end
     end
-    return -P/(6L^3)
+    return -P/(3L^3)
 end
 
 function avg3D(A::Array{Float64,1})
@@ -208,9 +211,10 @@ function avg3D(A::Array{Float64,1})
     return [sum(A[1:3:N-2]), sum(A[2:3:N-1]), sum(A[3:3:N])]./N
 end
 
+# where X0 is a triplet at t=0, XX the hystory of that point at t>0
 # fare attenzione a non prendere particella vicino ai bordi
-function lindemann(X0, XX, N, rho)   # where X0 is a triplet at t=0, XX the hystory of that point at t>0
-    L = cbrt(N/rho)
+function lindemann(X0, XX, N, rho)
+    L = ∛(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
     deltaX = sqrt(sum((XX[1,:]-X0[1]).^2 .+ (XX[2,:]-X0[2]).^2 .+ (XX[3,:]-X0[3]).^2) / (length(XX[1,:])-1))
