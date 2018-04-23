@@ -47,7 +47,8 @@ T, dT = [ x[5] for x in result ], [ x[6] for x in result ]
 ld = [ x[7] for x in result ]
 
 
-DP = convert(DataFrame, [ρ V P])
+DP = convert(DataFrame, [ρ V P E T ld])
+rename!(DP, f => t for (f, t) = zip([:x1, :x2, :x3, :x4, :x5, :x6],[:d :V :P :E :T :ld]))
 file = string("./Data/PV_",N,"_T",T0,".csv")
 CSV.write(file, DP)
 
