@@ -258,6 +258,32 @@ function lindemann2(XX, CM, N, rho)
     return (sum(deltaX)/N)*2/a
 end
 
+function orderParameter(XX, N, rho)
+    L = cbrt(N/rho)
+    Na = round(Int,∛(N/4)) # number of cells per dimension
+    a = L / Na  # passo reticolare
+    #X0 = XX[:,1].*ones(XX) + C_
+    dx = zeros(Na^3*3,size(XX,2))
+    dy = zeros(dx)
+    dz = zeros(dx)
+    for k=0:Na^3-1
+        for i=1:3
+            dx[3k+i,:] = XX[12k+1,:] - XX[12k+3i+1,:]
+            dx[3k+i,:] .-= L*round.(dx[3k+i,:]/L)
+            dy[3k+i,:] = XX[12k+2,:] - XX[12k+3i+2,:]
+            dy[3k+i,:] .-= L*round.(dy[3k+i,:]/L)
+            dz[3k+i,:] = XX[12k+3,:] - XX[12k+3i+3,:]
+            dz[3k+i,:] .-= L*round.(dz[3k+i,:]/L)
+        end
+    end
+    dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
+
+    R = dr[:,1]
+    K = 2π./R
+    OrdPar = mean((cos.(K.*dr)),2)
+    return mean(OrdPar)
+
+end
 
 ## -------------------------------------
 ## Visualization
