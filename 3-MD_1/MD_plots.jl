@@ -18,9 +18,9 @@ default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plo
     return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
 end
 
-@everywhere function parallelPV(rho, N, T0)
+@everywhere function parallelPV(rho, N, T0, rhoarray)
     # Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the animation
-    println("Run ", rho, "/", 3.5)
+    println("Run ", find(rhoarray.==rho), "/", length(rhoarray))
     XX, EE, TT, PP, CM = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=5*10^4, fstep=10, dt=5e-4,
      anim=false, csv=false, onlyP=false)
     P, dP = avgAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
@@ -42,7 +42,9 @@ N = 108
 T0 = 2.0
 V = N./ρ
 
-@time result = pmap(rho -> parallelPV(rho, N, T0), ρ)
+# map the parallelPV function to the ρ array
+@time result = pmap(rho -> parallelPV(rho, N, T0, ρ), ρ)
+# extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 T, dT = [ x[5] for x in result ], [ x[6] for x in result ]
