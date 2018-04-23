@@ -4,12 +4,11 @@ module Sim
 # Capire discrepanza formule pressione
 # Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
 # controllare mezzi in pressione, energia, temperatura
-# parametro d'ordine
+# parametro d'ordine su tutte le coppie?
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs (si può?)
 # provare Gadfly master
 # 3D temporal plot
-# migliorare visualizzazione avanzamento con pmap (?)
 
 using Plots, ProgressMeter, DataFrames, CSV
 pyplot()
@@ -86,15 +85,15 @@ function initializeSystem(N::Int, L, T)
     shiftSystem!(X,L)
     σ = sqrt(T)     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
-    @show temperature(V)
-    @show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
+    #@show temperature(V)
+    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     # force the average velocity to 0
     V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
     V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
-    @show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
+    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     @show avg3D(X)
-    @show temperature(V)
+    #@show temperature(V)
     return [X, V]
 end
 
@@ -132,8 +131,8 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
 
-    for l=0:Int(length(r)/3)-1
-        @inbounds @simd for i=0:l-1
+    for l=1:Int(length(r)/3)-1
+         @inbounds for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
