@@ -131,7 +131,7 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
 
-    for l=1:Int(length(r)/3)-1
+    for l=0:Int(length(r)/3)-1
          @inbounds for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
