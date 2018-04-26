@@ -13,7 +13,6 @@ PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
-
 # where f is the fraction of steps to cut off
 # per sistemi già abbastanza all'equilibrio (e.g. densità alta) anche 4-5 va bene
 # altrimenti (T bassa, ρ bassa) meglio 3 o anche 2 (se serve 2 meglio aumentare maxsteps)
@@ -38,7 +37,6 @@ end
 ##
 ## Grafico PV
 ##
-
 
 ρ = 0.075:0.025:1.15
 N = 256
@@ -79,4 +77,3 @@ gui()
 # Sim.make3Dplot(CM, T=1.0, rho=1.3)
 # ld = Sim.lindemann2(XX, CM, 108, 1.1)
 #OP = Sim.orderParameter(XX, 0.05)
-
