@@ -131,7 +131,7 @@ der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(r)
 
-    for l=1:Int(length(r)/3)-1
+    for l=0:Int(length(r)/3)-1
          @inbounds for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -191,7 +191,6 @@ function energy(r,v,L)
 end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
-@fastmath @inbounds temperature2(V) = sum(V.^2)   # *m/k se si usano quantità vere
 
 @fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ultraortodosso ma più veloce
 
@@ -257,31 +256,30 @@ function lindemann2(XX, CM, N, rho)
     return (sum(deltaX)/N)*2/a
 end
 
-function orderParameter(XX, N, rho)
+function orderParameter(XX, rho)
+    N = Int(size(XX,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
-    #X0 = XX[:,1].*ones(XX) + C_
-    dx = zeros(Na^3*3,size(XX,2))
+    r = XX[:,size(XX,2)÷3:end]  # taglia parti non all'equilibrio
+    dx = zeros(Na^3*3,size(r,2))
     dy = zeros(dx)
     dz = zeros(dx)
     for k=0:Na^3-1
-        for i=1:3
-            dx[3k+i,:] = XX[12k+1,:] - XX[12k+3i+1,:]
-            dx[3k+i,:] .-= L*round.(dx[3k+i,:]/L)
-            dy[3k+i,:] = XX[12k+2,:] - XX[12k+3i+2,:]
-            dy[3k+i,:] .-= L*round.(dy[3k+i,:]/L)
-            dz[3k+i,:] = XX[12k+3,:] - XX[12k+3i+3,:]
-            dz[3k+i,:] .-= L*round.(dz[3k+i,:]/L)
+        @inbounds for i=1:3
+            dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
+            dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
+            dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
+            dy[3k+i,:] .-= L.*round.(dy[3k+i,:]/L)
+            dz[3k+i,:] = r[12k+3,:] - r[12k+3i+3,:]
+            dz[3k+i,:] .-= L.*round.(dz[3k+i,:]/L)
         end
     end
     dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
-
     R = dr[:,1]
     K = 2π./R
-    OrdPar = mean((cos.(K.*dr)),2)
-    return mean(OrdPar)
-
+    ordPar = mean((cos.(K.*dr)),2)
+    return mean(ordPar)
 end
 
 ## -------------------------------------
