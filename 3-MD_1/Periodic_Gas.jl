@@ -33,6 +33,8 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     E = zeros(Int(maxsteps/fstep)) # array of total energy
     T = zeros(E) # array of temperature
     P = zeros(E) # array of total pressure
+    P1 = zeros(E)
+    P2 = zeros(E)
     CM = zeros(3*Int(maxsteps/fstep)) # da togliere
     F = forces(X,L) # initial forces
     #make3Dplot(V,L)
@@ -43,7 +45,8 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
             T[i] = temperature(V)
-            P[i] = T[i]*rho + vpressure(X,L)
+            P1[i] = T[i]*rho
+            P2[i] = vpressure(X,L)
             if !onlyP
                 E[i] = energy(X,V,L)
                 CM[3i-2:3i] = avg3D(X)
@@ -58,7 +61,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
-    return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
+    return XX, CM, E, T, P1, P2 # returns a matrix with the hystory of positions, energy and pressure arrays
 end
 
 
