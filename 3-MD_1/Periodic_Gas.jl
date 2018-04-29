@@ -113,7 +113,7 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
     nothing
 end
-function shiftSystem(A::Array{Float64,1}, L::Float64)
+function shiftSystem(A::Array{Float64,1}, L::Float64)   #usato solo per parametro d'ordine
     B = A
     @inbounds for j = 1:length(A)
         B[j] = B[j] - L*round(B[j]/L)
@@ -160,7 +160,7 @@ end
 
 @inbounds function velocityVerlet(x, v, F, L, dt)
     @. x += v*dt + F*dt^2/2
-    shiftSystem!(x, L)
+    shiftSystem!(x,L)
     F_ = forces(x,L)
     @. v += (F + F_)*dt/2
     return x, v, F_
