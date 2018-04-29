@@ -22,16 +22,19 @@ default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plo
 end
 
 @everywhere function parallelPV(rho, N, T0, rhoarray)
-    # Use a small fstep (even 1) for the PV plot, but higher (20-50) to create the animation
-    println("Run ", find(rhoarray.==rho), "/", length(rhoarray))
-    XX, EE, TT, PP, CM = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=12*10^4,
+    println("Run ", find(rhoarray.==rho)[1], "/", length(rhoarray))
+
+    XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=12*10^4,
      fstep=20, dt=5e-4, anim=false, csv=false, onlyP=false)
-    P, dP = avgAtEquilibrium(PP)  #+ ρ[i]*TT[length(PP)÷4:end])
+
     E, dE = avgAtEquilibrium(EE)
     T, dT = avgAtEquilibrium(TT)
+    P1, dP1 = avgAtEquilibrium(PP1)
+    P2, dP2 = avgAtEquilibrium(PP2)
+    P, dP = P1+P2, sqrt(dP1^2 + dP2^2)
     op = Sim.orderParameter(XX, rho)
     #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
-    return P, dP, E, dE, T, dT, op
+    return P, dP, E, dE, T, dT, op, P1, dP1, P2, dP2
 end
 
 ##
@@ -39,8 +42,8 @@ end
 ##
 
 ρ = 0.075:0.025:1.15
-N = 256
-T0 = 3.0
+N = 108
+T0 = 5.0
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -50,18 +53,20 @@ P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 T, dT = [ x[5] for x in result ], [ x[6] for x in result ]
 op = [ x[7] for x in result ]
+P1, dP1 = [ x[8] for x in result ], [ x[9] for x in result ]
+P2, dP2 = [ x[10] for x in result ], [ x[11] for x in result ]
 
 
-DP = DataFrame(d=ρ, V=V, P=P, dP=dP, E=E, dE=dE, T=T, dT=dT, op=op)
+data = DataFrame(d=ρ, V=V, P=P, dP=dP, E=E, dE=dE, T=T, dT=dT, op=op)
 file = string("./Data/PV_",N,"_T",T0,".csv")
-CSV.write(file, DP)
+CSV.write(file, data)
 
-rV1 = plot(ρ, P, ribbon=dP, fillalpha=.3, xaxis=("ρ",(0,ceil(ρ[end]*10)/10)),
+rV1 = Plots.plot(ρ, P, ribbon=dP, fillalpha=.3, xaxis=("ρ",(0,ceil(ρ[end]*10)/10)),
  yaxis=("P",(0,ceil(P[end]))), linewidth=2, leg=false)
 file = string("./Plots/rV_",N,"_T",T0,".pdf")
 savefig(rV1,file)
 
-PV1 = plot(V, P, ribbon=dP, fillalpha=.3, xaxis=("V",(0,2000)), yaxis=("P",(-1,ceil(P[end]))), linewidth=2, leg=false)
+PV1 = Plots.plot(V, P, ribbon=dP, fillalpha=.3, xaxis=("V",(0,2000)), yaxis=("P",(-1,ceil(P[end]))), linewidth=2, leg=false)
 
 file = string("./Plots/PV_",N,"_T",T0,".pdf")
 savefig(PV1,file)
@@ -71,9 +76,14 @@ gui()
 
 ## prove varie
 
-#XX, EE, TT, PP, CM = Sim.simulation(N=256, T0=1.0, rho=0.8, maxsteps=16*10^4, fstep=80, dt=5e-4, anim=false, csv=false)
+XX, EE, TT, PP, CM, PP1, PP2 = Sim.simulation(N=256, T0=0.025, rho=0.01, maxsteps=20*10^4,
+ fstep=80, dt=5e-4, anim=true, csv=true)
 # @show Sim.avg3D(CM)
 # Sim.make2DtemporalPlot(XX[:,100:200], T=1.0, rho=0.4, save=true)
 # Sim.make3Dplot(CM, T=1.0, rho=1.3)
 # ld = Sim.lindemann2(XX, CM, 108, 1.1)
 #OP = Sim.orderParameter(XX, 0.05)
+PPP = Plots.plot([1:20:length(PP1)*20].*5e-4, PP1, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)
+Plots.plot!(PPP,[1:20:length(PP2)*20].*5e-4, PP2, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)
+gui()
+Plots.plot([1:20:length(TT)*20].*5e-4, TT, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)

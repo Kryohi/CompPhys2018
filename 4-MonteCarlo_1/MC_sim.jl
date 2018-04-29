@@ -1,20 +1,8 @@
-module Sim
+module MC
 
 ## TODO
-# Capire discrepanza formule pressione
-# Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
-# controllare mezzi in pressione, energia, temperatura
-# parametro d'ordine su tutte le coppie?
-# velocizzare creazione animazione o minacciare maintainer su github di farlo
-# aggiungere entropia, energia libera di Gibbs (si può?)
-# provare Gadfly master
-# 3D temporal plot
 
-using Plots, ProgressMeter, DataFrames, CSV
-pyplot()
-PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
-fnt = "sans-serif"
-default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
+using ProgressMeter, DataFrames, CSV
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -33,8 +21,6 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     E = zeros(Int(maxsteps/fstep)) # array of total energy
     T = zeros(E) # array of temperature
     P = zeros(E) # array of total pressure
-    P1 = zeros(E)
-    P2 = zeros(E)
     CM = zeros(3*Int(maxsteps/fstep)) # da togliere
     F = forces(X,L) # initial forces
     #make3Dplot(V,L)
@@ -45,8 +31,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
             T[i] = temperature(V)
-            P1[i] = T[i]*rho
-            P2[i] = vpressure(X,L)
+            P[i] = T[i]*rho + vpressure(X,L)
             if !onlyP
                 E[i] = energy(X,V,L)
                 CM[3i-2:3i] = avg3D(X)
@@ -61,7 +46,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
-    return XX, CM, E, T, P1, P2 # returns a matrix with the hystory of positions, energy and pressure arrays
+    return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
 end
 
 
@@ -221,43 +206,6 @@ function avg3D(A::Array{Float64,1})
     return [sum(A[1:3:N-2]), sum(A[2:3:N-1]), sum(A[3:3:N])]./N
 end
 
-# where X0 is a triplet at t=0, XX the hystory of that point at t>0
-# fare attenzione a non prendere particella vicino ai bordi
-function lindemann(X0, XX, N, rho)
-    L = ∛(N/rho)
-    Na = round(Int,∛(N/4)) # number of cells per dimension
-    a = L / Na  # passo reticolare
-    deltaX = sqrt(sum((XX[1,:]-X0[1]).^2 .+ (XX[2,:]-X0[2]).^2 .+ (XX[3,:]-X0[3]).^2) / (length(XX[1,:])-1))
-    return deltaX*2/a
-end
-function lindemann2(XX, CM, N, rho)
-
-    CM_ = reshape(CM, (3,Int(length(CM)/3)))
-    @show size(CM_)
-    ΔCM = CM_[:,:] .- CM_[:,1]
-
-    C_ = zeros(XX)
-    for i in 1:Int(length(CM_)/3)
-        for t in 1:N
-            C_[3t-2,i] = ΔCM[1,i]
-            C_[3t-1,i] = ΔCM[2,i]
-            C_[3t,i] = ΔCM[3,i]
-        end
-    end
-
-    @show size(XX[:,1].*ones(XX))
-    X0 = XX[:,1].*ones(XX) + C_
-    @show size(X0)    #  X ideale= X iniz + ΔCM
-    L = cbrt(N/rho)
-    Na = round(Int,∛(N/4)) # number of cells per dimension
-    a = L / Na  # passo reticolare
-    deltaX = Array{Float64}(N)
-    for i in 1:N
-        deltaX[i] = sqrt(sum(shiftSystem(XX[3i-2,:]-X0[3i-2,:], L).^2 .+ shiftSystem(XX[3i-1,:]-X0[3i-1,:], L).^2 .+ shiftSystem(XX[3i,:]-X0[3i,:], L).^2) / (length(XX[1,:])-1))
-    end
-
-    return (sum(deltaX)/N)*2/a
-end
 
 function orderParameter(XX, rho)
     N = Int(size(XX,1)/3)
@@ -365,8 +313,3 @@ function prettyPrint(L, rho, E, T, P, cm)
 end
 
 end
-
-# @time XX, EE, TT, PP, CV = simulation(N=256, T0=0.5, rho=1.5, maxsteps=1*10^5, fstep=100, dt=5e-4, anim=false)
-#
-# plot(CV[1:3:end-2])
-# gui()
