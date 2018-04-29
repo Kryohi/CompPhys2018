@@ -9,28 +9,20 @@ push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere import Sim  # add module with all the functions in Perodic_Gas.jl
 
 pyplot(size=(800, 600))
-PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
-# where f is the fraction of steps to cut off
-# per sistemi già abbastanza all'equilibrio (e.g. densità alta) anche 4-5 va bene
-# altrimenti (T bassa, ρ bassa) meglio 3 o anche 2 (se serve 2 meglio aumentare maxsteps)
-@everywhere function avgAtEquilibrium(A, f=3)
-    l = length(A)
-    return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
-end
 
 @everywhere function parallelPV(rho, N, T0, rhoarray)
     println("Run ", find(rhoarray.==rho)[1], "/", length(rhoarray))
 
-    XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=12*10^4,
+    XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=10*10^4,
      fstep=20, dt=5e-4, anim=false, csv=false, onlyP=false)
 
-    E, dE = avgAtEquilibrium(EE)
-    T, dT = avgAtEquilibrium(TT)
-    P1, dP1 = avgAtEquilibrium(PP1)
-    P2, dP2 = avgAtEquilibrium(PP2)
+    E, dE = Sim.avgAtEquilibrium(EE)
+    T, dT = Sim.avgAtEquilibrium(TT)
+    P1, dP1 = Sim.avgAtEquilibrium(PP1)
+    P2, dP2 = Sim.avgAtEquilibrium(PP2)
     P, dP = P1+P2, sqrt(dP1^2 + dP2^2)
     op = Sim.orderParameter(XX, rho)
     #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
@@ -41,9 +33,10 @@ end
 ## Grafico PV
 ##
 
-ρ = 0.075:0.025:1.15
-N = 108
-T0 = 5.0
+#ρ = 0.075:0.025:1.15
+ρ = 0.79:0.01:0.94
+N = 256
+T0 = 1.0
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -57,7 +50,8 @@ P1, dP1 = [ x[8] for x in result ], [ x[9] for x in result ]
 P2, dP2 = [ x[10] for x in result ], [ x[11] for x in result ]
 
 
-data = DataFrame(d=ρ, V=V, P=P, dP=dP, E=E, dE=dE, T=T, dT=dT, op=op)
+data = DataFrame(d=ρ, V=V, P=P, dP=dP, E=E, dE=dE, T=T, dT=dT,
+ op=op, P1=P1, dP1=dP1, P2=P2, dP2=dP2)
 file = string("./Data/PV_",N,"_T",T0,".csv")
 CSV.write(file, data)
 
@@ -76,8 +70,8 @@ gui()
 
 ## prove varie
 
-XX, EE, TT, PP, CM, PP1, PP2 = Sim.simulation(N=256, T0=0.025, rho=0.01, maxsteps=20*10^4,
- fstep=80, dt=5e-4, anim=true, csv=true)
+#XX, EE, TT, PP, CM, PP1, PP2 = Sim.simulation(N=256, T0=0.025, rho=0.01, maxsteps=20*10^4,
+# fstep=80, dt=5e-4, anim=true, csv=true)
 # @show Sim.avg3D(CM)
 # Sim.make2DtemporalPlot(XX[:,100:200], T=1.0, rho=0.4, save=true)
 # Sim.make3Dplot(CM, T=1.0, rho=1.3)

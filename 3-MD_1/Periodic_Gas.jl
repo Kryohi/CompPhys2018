@@ -32,7 +32,6 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
     E = zeros(Int(maxsteps/fstep)) # array of total energy
     T = zeros(E) # array of temperature
-    P = zeros(E) # array of total pressure
     P1 = zeros(E)
     P2 = zeros(E)
     CM = zeros(3*Int(maxsteps/fstep)) # da togliere
@@ -57,7 +56,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
         next!(prog)
     end
 
-    prettyPrint(L, rho, E, T, P, CM)
+    prettyPrint(L, rho, E, T, P1+P2, CM)
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
@@ -347,6 +346,14 @@ end
 ## -------------------------------------
 ## Miscellaneous
 ##
+
+# where f is the fraction of steps to cut off
+# per sistemi già abbastanza all'equilibrio (e.g. densità alta) anche 4-5 va bene
+# altrimenti (T bassa, ρ bassa) meglio 3 o anche 2 (se serve 2 meglio aumentare maxsteps)
+function avgAtEquilibrium(A, f=4)
+    l = length(A)
+    return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
+end
 
 function saveCSV(M; N="???", T="???", rho="???")
     D = convert(DataFrame, M)
