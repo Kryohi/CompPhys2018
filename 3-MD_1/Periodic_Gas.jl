@@ -1,18 +1,14 @@
 module Sim
 
 ## TODO
-# Capire discrepanza formule pressione
-# Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
-# controllare mezzi in pressione, energia, temperatura
 # parametro d'ordine su tutte le coppie?
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs (si può?)
-# provare Gadfly master
 # 3D temporal plot
 
-using Plots, ProgressMeter, DataFrames, CSV
+using DataFrames, CSV, ProgressMeter, Plots
 pyplot()
-PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
+PyPlot.PyObject(PyPlot.axes3D)  #servirà finché non esce prossima versione di Plots con bug fix
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
@@ -32,7 +28,6 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
     XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
     E = zeros(Int(maxsteps/fstep)) # array of total energy
     T = zeros(E) # array of temperature
-    P = zeros(E) # array of total pressure
     P1 = zeros(E)
     P2 = zeros(E)
     CM = zeros(3*Int(maxsteps/fstep)) # da togliere
@@ -57,7 +52,7 @@ function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, 
         next!(prog)
     end
 
-    prettyPrint(L, rho, E, T, P, CM)
+    prettyPrint(L, rho, E, T, P1+P2, CM)
     csv && saveCSV(XX', N=N, T=T0, rho=rho)
     anim && makeVideo(XX, T=T0, rho=rho)
 
@@ -91,7 +86,7 @@ function initializeSystem(N::Int, L, T)
     #@show temperature(V)
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     # force the average velocity to 0
-    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
+    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N #hmmm
     V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
@@ -114,7 +109,7 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
     nothing
 end
-function shiftSystem(A::Array{Float64,1}, L::Float64)
+function shiftSystem(A::Array{Float64,1}, L::Float64)   #usato solo per parametro d'ordine
     B = A
     @inbounds for j = 1:length(A)
         B[j] = B[j] - L*round(B[j]/L)
@@ -161,7 +156,7 @@ end
 
 @inbounds function velocityVerlet(x, v, F, L, dt)
     @. x += v*dt + F*dt^2/2
-    shiftSystem!(x, L)
+    shiftSystem!(x,L)
     F_ = forces(x,L)
     @. v += (F + F_)*dt/2
     return x, v, F_
@@ -347,6 +342,14 @@ end
 ## -------------------------------------
 ## Miscellaneous
 ##
+
+# where f is the fraction of steps to cut off
+# per sistemi già abbastanza all'equilibrio (e.g. densità alta) anche 4-5 va bene
+# altrimenti (T bassa, ρ bassa) meglio 3 o anche 2 (se serve 2 meglio aumentare maxsteps)
+function avgAtEquilibrium(A, f=4)
+    l = length(A)
+    return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
+end
 
 function saveCSV(M; N="???", T="???", rho="???")
     D = convert(DataFrame, M)
