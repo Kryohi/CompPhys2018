@@ -1,8 +1,9 @@
 module MC
 
 ## TODO
+# sostituire check equilibrium con convoluzione per smoothing e derivata discreta
 
-using ProgressMeter, DataFrames, CSV
+using ProgressMeter, DataFrames, CSV, Plots
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -10,43 +11,29 @@ any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 
-# Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
-# saves the positions arrays every fstep iterations, returns and saves it as a csv file
-# and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T0=4.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, anim=false, csv=true, onlyP=false)
+function simulation(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
 
-    L = cbrt(N/rho)
-    X, V = initializeSystem(N, L, T0)
-    XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
-    E = zeros(Int(maxsteps/fstep)) # array of total energy
-    T = zeros(E) # array of temperature
-    P = zeros(E) # array of total pressure
-    CM = zeros(3*Int(maxsteps/fstep)) # da togliere
-    F = forces(X,L) # initial forces
-    #make3Dplot(V,L)
-    println()
+    c = 1/D
+    X = vecboxMuller(1.0,3N)
+    Y = zeros(3N)
+    j = zeros(Int64, maxsteps)
+    X, jeq = equilibrium(X,D,T0)
 
-    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
-    @inbounds for n = 1:maxsteps
-        if (n-1)%fstep == 0
-            i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
-            T[i] = temperature(V)
-            P[i] = T[i]*rho + vpressure(X,L)
-            if !onlyP
-                E[i] = energy(X,V,L)
-                CM[3i-2:3i] = avg3D(X)
-                XX[:,i] = X
+    for n=1:maxsteps
+        # Proposta
+        Y .= X .+ D.*(rand(3N).-0.5)
+        #shiftSystem!(Y,10.0) # serve? boh
+        # P[Y]/P[X]
+        ap = exp.((HO.(X,.5) - HO.(Y,.5))/T0)
+        η = rand(3N)
+        for i = 1:length(X)
+            if η[i] < ap[i]
+                X[i] = Y[i]
+                j[n] += 1
             end
         end
-        X, V, F = velocityVerlet(X, V, F, L, dt)
-        next!(prog)
     end
-
-    prettyPrint(L, rho, E, T, P, CM)
-    csv && saveCSV(XX', N=N, T=T0, rho=rho)
-    anim && makeVideo(XX, T=T0, rho=rho)
-
-    return XX, E, T, P, CM # returns a matrix with the hystory of positions, energy and pressure arrays
+    return X, jeq, j./(3N)
 end
 
 
@@ -85,9 +72,42 @@ function initializeSystem(N::Int, L, T)
     return [X, V]
 end
 
+function equilibrium(X, D, T0)
+    eqstepsmax = 2000
+    N = Int(length(X)/3)
+    j = zeros(eqstepsmax)
+    jm = zeros(eqstepsmax÷50)
+    Y = zeros(3N)
+    for n=1:eqstepsmax
+        # Proposta
+        Y .= X .+ D.*(rand(3N).-0.5)
+        # P[Y]/P[X]
+        ap = exp.((HO.(X,.5) - HO.(Y,.5))/T0)
+        η = rand(3N)
+        for i = 1:3N
+            if η[i] < ap[i]
+                X[i] = Y[i]
+                j[n] += 1
+            end
+        end
+        if n%50 == 0
+            jm[n÷50+1] = mean(j[(n-49):n])
+            # se la differenza della media di due blocchi è meno di due centesimi
+            # della variazione massima di j, equilibrio raggiunto
+            if abs(jm[n÷50+1]-jm[n÷50]) / (maximum(j)-minimum(j[j.>0])) < 0.02
+                return X, j[1:n]./(3N)
+            end
+        end
+    end
+    warn("It seems equilibrium was not reached")
+    return X, j
+end
+
+Tgauss(x,y) = exp(-(x-y)^2/2)/√(2π)
+
 # creates an array with length N of gaussian distributed numbers using Box-Muller
 function vecboxMuller(sigma, N::Int, x0=0.0)
-    srand(60)   # sets the rng seed, to obtain reproducible numbers
+    #srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
@@ -97,59 +117,19 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     @inbounds for j = 1:length(A)
         A[j] = A[j] - L*round(A[j]/L)
     end
-    nothing
 end
-function shiftSystem(A::Array{Float64,1}, L::Float64)
-    B = A
-    @inbounds for j = 1:length(A)
-        B[j] = B[j] - L*round(B[j]/L)
-    end
-    return B
-end
-
 
 
 ## -------------------------------------
 ## Evolution
 ##
 
+HO(x::Float64,ω::Float64) = ω^2*x^2 /2
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 
-function forces(r::Array{Float64,1}, L::Float64)
-    F = zeros(r)
+function metropolis(x, D)
 
-    for l=0:Int(length(r)/3)-1
-         @inbounds for i=0:l-1
-            dx = r[3l+1] - r[3i+1]
-            dx = dx - L*round(dx/L)
-            dy = r[3l+2] - r[3i+2]
-            dy = dy - L*round(dy/L)
-            dz = r[3l+3] - r[3i+3]
-            dz = dz - L*round(dz/L)
-            dr2 = dx*dx + dy*dy + dz*dz
-            if dr2 < L*L/4
-                #dV = -der_LJ(sqrt(dr2))
-                dV = -24*dr2^-4 + 48*dr2^-7
-                F[3l+1] += dV*dx
-                F[3l+2] += dV*dy
-                F[3l+3] += dV*dz
-                F[3i+1] -= dV*dx
-                F[3i+2] -= dV*dy
-                F[3i+3] -= dV*dz
-            end
-        end
-    end
-    return F
-end
-
-
-@inbounds function velocityVerlet(x, v, F, L, dt)
-    @. x += v*dt + F*dt^2/2
-    shiftSystem!(x, L)
-    F_ = forces(x,L)
-    @. v += (F + F_)*dt/2
-    return x, v, F_
 end
 
 
@@ -236,29 +216,6 @@ end
 ## -------------------------------------
 ## Visualization
 ##
-
-# makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
-# don't run this with more than ~1000 frames unless you have a lot of spare time...
-function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=false)
-    close("all")
-    Plots.default(size=(1280,1080))
-    N = Int(size(M,1)/3)
-    rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
-    println("\nI'm cooking pngs to make a nice video. It will take some time...")
-    prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
-
-    anim = @animate for i =1:size(M,2)
-        Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
-        if showCM   # add center of mass indicator
-            cm = avg3D(M[:,i])
-            scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
-        end
-        next!(prog) # increment the progress bar
-    end
-    file = string("./Video/LJ",N,"_T",T,"_d",rho,".mp4")
-    mp4(anim, file, fps = fps)
-    gui() #show the last frame in a separate window
-end
 
 function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
     Plots.default(size=(800,600))

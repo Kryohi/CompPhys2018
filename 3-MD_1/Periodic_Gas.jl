@@ -1,18 +1,14 @@
 module Sim
 
 ## TODO
-# Capire discrepanza formule pressione
-# Capire discrepanza T calcolata e inizializzata (è giusto quel /3?)
-# controllare mezzi in pressione, energia, temperatura
 # parametro d'ordine su tutte le coppie?
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs (si può?)
-# provare Gadfly master
 # 3D temporal plot
 
-using Plots, ProgressMeter, DataFrames, CSV
+using DataFrames, CSV, ProgressMeter, Plots
 pyplot()
-PyPlot.PyObject(PyPlot.axes3D)  # servirà finché non esce la prossima versione di Plots con bug fixato
+PyPlot.PyObject(PyPlot.axes3D)  #servirà finché non esce prossima versione di Plots con bug fix
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
@@ -90,7 +86,7 @@ function initializeSystem(N::Int, L, T)
     #@show temperature(V)
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     # force the average velocity to 0
-    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
+    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N #hmmm
     V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N

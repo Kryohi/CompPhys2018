@@ -3,10 +3,10 @@ if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
 
-using Plots, DataFrames, ProgressMeter, CSV, PyCall
+using DataFrames, CSV, ProgressMeter, PyCall, Plots
 push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/Periodic_Gas.jl"))
-@everywhere import Sim  # add module with all the functions in Perodic_Gas.jl
+@everywhere import Sim  # add module with all the functions in Periodic_Gas.jl
 
 pyplot(size=(800, 600))
 fnt = "sans-serif"
@@ -35,7 +35,7 @@ end
 
 ρ = 0.075:0.025:1.15
 N = 256
-T0 = 1.0
+T0 = 15.0
 V = N./ρ
 
 # map the parallelPV function to the ρ array
