@@ -13,7 +13,8 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 function simulation(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
 
-    c = 1/D
+    c = 1/D # non ho ancora capito dove va usato
+    # inizializzazione come gaussiana, ma potrebbe anche essere uniforme
     X = vecboxMuller(1.0,3N)
     Y = zeros(3N)
     j = zeros(Int64, maxsteps)
@@ -43,6 +44,7 @@ end
 
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
 # maxwell-boltzmann velocities
+# suppongo non serva più?
 function initializeSystem(N::Int, L, T)
     Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
@@ -100,7 +102,7 @@ function equilibrium(X, D, T0)
         end
     end
     warn("It seems equilibrium was not reached")
-    return X, j
+    return X, j./(3N)
 end
 
 Tgauss(x,y) = exp(-(x-y)^2/2)/√(2π)
