@@ -5,8 +5,9 @@ module Sim
 # velocizzare creazione animazione o minacciare maintainer su github di farlo
 # aggiungere entropia, energia libera di Gibbs (si può?)
 # 3D temporal plot
+# provare StaticArrays
 
-using DataFrames, CSV, ProgressMeter, Plots
+using DataFrames, CSV, ProgressMeter, Plots, StaticArrays
 pyplot()
 PyPlot.PyObject(PyPlot.axes3D)  #servirà finché non esce prossima versione di Plots con bug fix
 fnt = "sans-serif"
@@ -72,7 +73,7 @@ function initializeSystem(N::Int, L, T)
     !isapprox(Na, cbrt(N/4)) && error("Can't make a cubic FCC crystal with this N :(")
 
     X = Array{Float64}(3N)
-    for i=0:Na-1, j=0:Na-1, k = 0:Na-1  # loop over every cell of the cfc lattice
+    for i=0:Na-1, j=0:Na-1, k = 0:Na-1  # loop over every cell of the fcc lattice
         n = i*Na*Na + j*Na + k # unique number for each triplet i,j,k
         X[n*12+1], X[n*12+2], X[n*12+3] = a*i, a*j, a*k # vertice celle [x1,y1,z1,...]
         X[n*12+4], X[n*12+5], X[n*12+6] = a*i + a/2, a*j + a/2, a*k
@@ -83,7 +84,7 @@ function initializeSystem(N::Int, L, T)
     shiftSystem!(X,L)
     σ = sqrt(T)     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
-    #@show temperature(V)
+    @show temperature(V)
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     # force the average velocity to 0
     V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N #hmmm
@@ -91,7 +92,7 @@ function initializeSystem(N::Int, L, T)
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
     #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     @show avg3D(X)
-    #@show temperature(V)
+    @show temperature(V)
     return [X, V]
 end
 
@@ -100,7 +101,7 @@ function vecboxMuller(sigma, N::Int, x0=0.0)
     srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
-    @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
+    @. [sqrt(-2sigma^2*log(1-x1))*cos(2π*x2); sqrt(-2sigma^2*log(1-x2))*sin(2π*x1)]
 end
 
 function shiftSystem!(A::Array{Float64,1}, L::Float64)
@@ -188,13 +189,14 @@ function energy(r,v,L)
     return T+V
 end
 
-@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
+@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V))   # *m/k se si usano quantità vere
+@fastmath @inbounds temperature_l(V) = sum(V.^2)/(length(V)/3)
 
 @fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ultraortodosso ma più veloce
 
 @fastmath function vpressure(r,L)
     P = 0.0
-    @inbounds for l=1:Int(length(r)/3)-1
+    @inbounds for l=0:Int(length(r)/3)-1
         for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
