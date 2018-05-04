@@ -9,14 +9,14 @@ push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere import Sim  # add module with all the functions in Periodic_Gas.jl
 
 pyplot(size=(800, 600))
-fnt = "sans-serif"
+fnt = "helvetica"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 
 
 @everywhere function parallelPV(rho, N, T0, rhoarray)
     println("Run ", find(rhoarray.==rho)[1], "/", length(rhoarray))
 
-    XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=10*10^4,
+    XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=N, T0=T0, rho=rho, maxsteps=1*10^5,
      fstep=20, dt=5e-4, anim=false, csv=false, onlyP=false)
 
     E, dE = Sim.avgAtEquilibrium(EE)
@@ -33,11 +33,12 @@ end
 ## Grafico PV
 ##
 
-ρ = 0.075:0.025:1.15
+ρ = 0.075:0.025:1.175
 N = 256
-T0 = 15.0
+T0 = 2.0
 V = N./ρ
 
+#@time for T0 in Tarr
 # map the parallelPV function to the ρ array
 @time result = pmap(rho -> parallelPV(rho, N, T0, ρ), ρ)
 # extract the resulting arrays from the result tuple
@@ -63,20 +64,22 @@ PV1 = Plots.plot(V, P, ribbon=dP, fillalpha=.3, xaxis=("V",(0,2000)), yaxis=("P"
 
 file = string("./Plots/PV2_",N,"_T",T0,".pdf")
 savefig(PV1,file)
+#end
 
 gui()
 
 
 ## prove varie
 
-#XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=256, T0=0.025, rho=0.01, maxsteps=20*10^4,
-# fstep=80, dt=5e-4, anim=true, csv=true)
+XX, CM, EE, TT, PP1, PP2 = Sim.simulation(N=256, T0=3.0, rho=0.5, maxsteps=10*10^4,
+ fstep=100, dt=5e-4, anim=false, csv=false)
 # @show Sim.avg3D(CM)
 # Sim.make2DtemporalPlot(XX[:,100:200], T=1.0, rho=0.4, save=true)
 # Sim.make3Dplot(CM, T=1.0, rho=1.3)
 # ld = Sim.lindemann2(XX, CM, 108, 1.1)
 #OP = Sim.orderParameter(XX, 0.05)
-#PPP = Plots.plot([1:20:length(PP1)*20].*5e-4, PP1, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)
+#EP = Plots.plot([1:100:length(PP1)*100].*5e-4, EE, xaxis=("t",(0,50)), yaxis=("E"), linewidth=1.0, leg=false)
 #Plots.plot!(PPP,[1:20:length(PP2)*20].*5e-4, PP2, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)
-gui()
-#Plots.plot([1:20:length(TT)*20].*5e-4, TT, xaxis=("t"), yaxis=("P"), linewidth=1.5, leg=false)
+#file = string("./Plots/EE_",256,"_T",3.0,".pdf")
+#savefig(EP,file)
+#gui

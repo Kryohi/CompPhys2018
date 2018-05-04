@@ -169,9 +169,10 @@ end
 ##
 
 function energy(r,v,L)
-    T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
+    #T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
+    T=0.0
     V = 0.0
-    @inbounds for l=1:Int(length(r)/3)-1
+    @inbounds for l=0:Int(length(r)/3)-1
         T += (v[3l+1]^2 + v[3l+2]^2 + v[3l+3]^2)./2
         @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
@@ -190,9 +191,8 @@ function energy(r,v,L)
 end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V))   # *m/k se si usano quantità vere
-@fastmath @inbounds temperature_l(V) = sum(V.^2)/(length(V)/3)
 
-@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ultraortodosso ma più veloce
+@fastmath @inbounds vpressure2(X,F,L) = sum(X.*F)/(3L^3)    # non ortodosso ma più veloce
 
 @fastmath function vpressure(r,L)
     P = 0.0
@@ -350,6 +350,8 @@ end
 # altrimenti (T bassa, ρ bassa) meglio 3 o anche 2 (se serve 2 meglio aumentare maxsteps)
 function avgAtEquilibrium(A, f=4)
     l = length(A)
+    # in realtà è altamente sbagliata quella divisione per sqrt(n), vale solo se fstep alto
+    # (ovvero no correlazione tra dati successivi)
     return mean(A[l÷f:end]), std(A[l÷f:end])/sqrt(l*(1-1/f))
 end
 
@@ -362,6 +364,8 @@ end
 
 function prettyPrint(L, rho, E, T, P, cm)
     l = length(P)
+    # in realtà è altamente sbagliata quella divisione per sqrt(n), vale solo se fstep alto
+    # (ovvero no correlazione tra dati successivi)
     println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
     println("Mean temperature: ", mean(T[l÷3:end]), " ± ", std(T[l÷3:end])/sqrt(l*2/3))
     println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
@@ -370,8 +374,3 @@ function prettyPrint(L, rho, E, T, P, cm)
 end
 
 end
-
-# @time XX, EE, TT, PP, CV = simulation(N=256, T0=0.5, rho=1.5, maxsteps=1*10^5, fstep=100, dt=5e-4, anim=false)
-#
-# plot(CV[1:3:end-2])
-# gui()
