@@ -10,8 +10,48 @@ any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
+# Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
+# saves the positions arrays every fstep iterations, returns and saves it as a csv file
+# and optionally creates an animation of the particles (also doable at a later time from the XX output)
+function simulation(; N=256, T0=2.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, anim=false, csv=true, onlyP=false)
 
-function simulation(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
+    L = cbrt(N/rho)
+    X, V = initializeSystem(N, L, T0)
+    XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
+    E = zeros(Int(maxsteps/fstep)) # array of total energy
+    T = zeros(E) # array of temperature
+    P1 = zeros(E)
+    P2 = zeros(E)
+    CM = zeros(3*Int(maxsteps/fstep)) # da togliere
+    #make3Dplot(V,L)
+    println()
+
+    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
+    @inbounds for n = 1:maxsteps
+        if (n-1)%fstep == 0
+            i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
+            T[i] = temperature(V)
+            P1[i] = T[i]*rho
+            P2[i] = vpressure(X,L)
+            if !onlyP
+                E[i] = energy(X,V,L)
+                CM[3i-2:3i] = avg3D(X)
+                XX[:,i] = X
+            end
+        end
+        X, V = metropolis(X, V, L, dt)
+        next!(prog)
+    end
+
+    prettyPrint(L, rho, E, T, P1+P2, CM)
+    csv && saveCSV(XX', N=N, T=T0, rho=rho)
+    anim && makeVideo(XX, T=T0, rho=rho)
+
+    return XX, CM, E, T, P1, P2 # returns a matrix with the hystory of positions, energy and pressure arrays
+end
+
+# toy model of canonical ensemble of harmonic oscillators
+function oscillator(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
 
     c = 1/D # non ho ancora capito dove va usato
     # inizializzazione come gaussiana, ma potrebbe anche essere uniforme
@@ -105,7 +145,6 @@ function equilibrium(X, D, T0)
     return X, j./(3N)
 end
 
-Tgauss(x,y) = exp(-(x-y)^2/2)/√(2π)
 
 # creates an array with length N of gaussian distributed numbers using Box-Muller
 function vecboxMuller(sigma, N::Int, x0=0.0)
@@ -229,6 +268,30 @@ function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
     end
     gui()
+end
+
+
+# makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
+# don't run this with more than ~1000 frames unless you have a lot of spare time...
+function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=false)
+    close("all")
+    Plots.default(size=(1280,1080))
+    N = Int(size(M,1)/3)
+    rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
+    println("\nI'm cooking pngs to make a nice video. It will take some time...")
+    prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
+
+    anim = @animate for i =1:size(M,2)
+        Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+        if showCM   # add center of mass indicator
+            cm = avg3D(M[:,i])
+            scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
+        end
+        next!(prog) # increment the progress bar
+    end
+    file = string("./Video/LJ",N,"_T",T,"_d",rho,".mp4")
+    mp4(anim, file, fps = fps)
+    gui() #show the last frame in a separate window
 end
 
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
