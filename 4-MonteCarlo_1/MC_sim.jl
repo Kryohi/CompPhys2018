@@ -2,8 +2,15 @@ module MC
 
 ## TODO
 # sostituire check equilibrium con convoluzione per smoothing e derivata discreta
+# ottimizzare e parallelizzare
+# provare a riscrivere in C loop simulazione
+
 
 using ProgressMeter, DataFrames, CSV, Plots
+pyplot(size=(800, 600))
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
+
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -13,68 +20,51 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T0=2.0, rho=1.3, dt=1e-4, fstep=50, maxsteps=10^4, anim=false, csv=true, onlyP=false)
+function simulation(; N=256, T=2.0, rho=1.3, Df=1/200, fstep=1, maxsteps=10^4, anim=false, csv=true)
 
     L = cbrt(N/rho)
-    X, V = initializeSystem(N, L, T0)
+    D = L*Df
+    X = initializeSystem(N, L, T)
+    X, jeq = equilibrium(X, D, T, L)
+    make3Dplot(X,T=T,rho=rho)
+    Y = zeros(3N)
+    j = zeros(Int64, maxsteps)
     XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
-    E = zeros(Int(maxsteps/fstep)) # array of total energy
-    T = zeros(E) # array of temperature
-    P1 = zeros(E)
-    P2 = zeros(E)
+    U = zeros(Int(maxsteps/fstep)) # array of total energy
+    P2 = zeros(U)
     CM = zeros(3*Int(maxsteps/fstep)) # da togliere
-    #make3Dplot(V,L)
+
     println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
         if (n-1)%fstep == 0
             i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
-            T[i] = temperature(V)
-            P1[i] = T[i]*rho
             P2[i] = vpressure(X,L)
-            if !onlyP
-                E[i] = energy(X,V,L)
-                CM[3i-2:3i] = avg3D(X)
-                XX[:,i] = X
-            end
+            U[i] = energy(X,L)
+            CM[3i-2:3i] = avg3D(X)
+            XX[:,i] = X
         end
-        X, V = metropolis(X, V, L, dt)
-        next!(prog)
-    end
-
-    prettyPrint(L, rho, E, T, P1+P2, CM)
-    csv && saveCSV(XX', N=N, T=T0, rho=rho)
-    anim && makeVideo(XX, T=T0, rho=rho)
-
-    return XX, CM, E, T, P1, P2 # returns a matrix with the hystory of positions, energy and pressure arrays
-end
-
-# toy model of canonical ensemble of harmonic oscillators
-function oscillator(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
-
-    c = 1/D # non ho ancora capito dove va usato
-    # inizializzazione come gaussiana, ma potrebbe anche essere uniforme
-    X = vecboxMuller(1.0,3N)
-    Y = zeros(3N)
-    j = zeros(Int64, maxsteps)
-    X, jeq = equilibrium(X,D,T0)
-
-    for n=1:maxsteps
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
-        #shiftSystem!(Y,10.0) # serve? boh
+        shiftSystem!(Y,L)
         # P[Y]/P[X]
-        ap = exp.((HO.(X,.5) - HO.(Y,.5))/T0)
+        ap = exp((energy(X,L) - energy(Y,L))/T)
         η = rand(3N)
         for i = 1:length(X)
-            if η[i] < ap[i]
+            if η[i] < ap
                 X[i] = Y[i]
                 j[n] += 1
             end
         end
+        next!(prog)
     end
-    return X, jeq, j./(3N)
+
+    prettyPrint(L, rho, U, P2, CM)
+    csv && saveCSV(XX', N=N, T=T, rho=rho)
+    anim && makeVideo(XX, T=T, rho=rho)
+
+    return XX, CM, U.+3N*T/2, P2.+rho*T, jeq, j./(3N)
 end
 
 
@@ -102,32 +92,28 @@ function initializeSystem(N::Int, L, T)
     shiftSystem!(X,L)
     σ = sqrt(T)     #  in qualche unità di misura
     V = vecboxMuller(σ,3N)
-    #@show temperature(V)
-    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
     # force the average velocity to 0
     V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
     V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
     V[3:3:N] .-= 3*sum(V[3:3:N])/N
-    #@show [sum(V[1:3:N-2]), sum(V[2:3:N-1]), sum(V[3:3:N])]./N
-    @show avg3D(X)
-    #@show temperature(V)
-    return [X, V]
+    return X
 end
 
-function equilibrium(X, D, T0)
+function equilibrium(X::Array{Float64}, D::Float64, T::Float64, L::Float64)
     eqstepsmax = 2000
     N = Int(length(X)/3)
     j = zeros(eqstepsmax)
     jm = zeros(eqstepsmax÷50)
     Y = zeros(3N)
-    for n=1:eqstepsmax
+    @inbounds for n=1:eqstepsmax
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
+        shiftSystem!(Y,L)
         # P[Y]/P[X]
-        ap = exp.((HO.(X,.5) - HO.(Y,.5))/T0)
-        η = rand(3N)
+        @show ap = exp((energy(X,L) - energy(Y,L))/T)
+        @show η = rand(3N)
         for i = 1:3N
-            if η[i] < ap[i]
+            if η[i] < ap
                 X[i] = Y[i]
                 j[n] += 1
             end
@@ -169,8 +155,8 @@ HO(x::Float64,ω::Float64) = ω^2*x^2 /2
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 
-function metropolis(x, D)
 
+function metropolis(x, D)
 end
 
 
@@ -178,11 +164,9 @@ end
 ## Thermodinamic Properties
 ##
 
-function energy(r,v,L)
-    T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
+function energy(r,L)
     V = 0.0
-    @inbounds for l=1:Int(length(r)/3)-1
-        T += (v[3l+1]^2 + v[3l+2]^2 + v[3l+3]^2)./2
+    @inbounds for l=0:Int(length(r)/3)-1
         @simd for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -196,7 +180,7 @@ function energy(r,v,L)
             end
         end
     end
-    return T+V
+    return V
 end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
@@ -325,10 +309,9 @@ function saveCSV(M; N="???", T="???", rho="???")
     info("System saved in ", file)
 end
 
-function prettyPrint(L, rho, E, T, P, cm)
+function prettyPrint(L, rho, E, P, cm)
     l = length(P)
     println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
-    println("Mean temperature: ", mean(T[l÷3:end]), " ± ", std(T[l÷3:end])/sqrt(l*2/3))
     println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
     println("Mean center of mass: [", mean(cm[l÷3:3:end-2]), ", ", mean(cm[l÷3+1:3:end-1]), ", ", mean(cm[l÷3+2:3:end]), "]")
     println()
