@@ -3,7 +3,7 @@ module MC
 ## TODO
 # calcolo giusto di varianza (manca M)
 # raffinare scelta D, sia come parametri evolutivi che con metodo varianza
-# aggiungere check equilibrium con convoluzione per smoothing e derivata discreta
+# aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # fare qualche animazione e poi togliere XX
 # parallelizzare e ottimizzare
 # kernel openCL?
@@ -34,7 +34,7 @@ function simulation(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, an
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jeq = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
+    X, D, jbi = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -72,7 +72,7 @@ function simulation(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, an
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return XX, H, P2.+rho*T, CV, jeq, j./(3N)
+    return XX, H, P2.+rho*T, CV, jbi, j./(3N)
 end
 
 
