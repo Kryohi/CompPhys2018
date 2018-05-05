@@ -4,6 +4,7 @@ module MC
 # calcolo giusto di varianza (manca M)
 # raffinare scelta D, sia come parametri evolutivi che con metodo varianza
 # aggiungere check equilibrium con convoluzione per smoothing e derivata discreta
+# fare qualche animazione e poi togliere XX
 # parallelizzare e ottimizzare
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
@@ -28,31 +29,28 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T=2.0, rho=1.3, Df=1/20, fstep=1, maxsteps=10^4, anim=false, csv=true)
+function simulation(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, anim=false, csv=true)
 
     L = cbrt(N/rho)
     Na = cbrt(N/4)
     a = L / Na
-    @show D = a*Df    # Δ lo scegliamo come frazione di passo reticolare (per ora)
+    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X = initializeSystem(N, L, T)
     X, D, jeq = burnin(X, D, T, L)
     @show D/a
-    Y = zeros(3N)
-    j = zeros(Int64, maxsteps)
+    Y = zeros(3N)   # array proposta
+    j = zeros(Int64, maxsteps)  # array di frazioni accettate
     XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
     U = zeros(Int(maxsteps/fstep)) # array of total energy
     P2 = zeros(U)
-    CM = zeros(3*Int(maxsteps/fstep)) # da togliere
-
     println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
         if (n-1)%fstep == 0
-            i = cld(n,fstep)    # smallest integer larger than or equal to n/fstep
+            i = cld(n,fstep)
             P2[i] = vpressure(X,L)
             U[i] = energy(X,L)
-            CM[3i-2:3i] = avg3D(X)
             XX[:,i] = X
         end
         # Proposta
@@ -71,11 +69,12 @@ function simulation(; N=256, T=2.0, rho=1.3, Df=1/20, fstep=1, maxsteps=10^4, an
     end
 
     H = U.+3N*T/2
-    prettyPrint(L, rho, H, P2.+rho*T, CM)
+    CV = cv(H,T)
+    prettyPrint(L, rho, H, P2.+rho*T, CV)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return XX, CM, H, P2.+rho*T, cv(H,T), jeq, j./(3N)
+    return XX, H, P2.+rho*T, CV, jeq, j./(3N)
 end
 
 
@@ -326,11 +325,11 @@ function saveCSV(M; N="???", T="???", rho="???")
     info("System saved in ", file)
 end
 
-function prettyPrint(L, rho, E, P, cm)
+function prettyPrint(L, rho, E, P, cv)
     l = length(P)
     println("\nPressure: ", mean(P[l÷4:end]), " ± ", std(P[l÷4:end]))
     println("Mean energy: ", mean(E[l÷4:end]), " ± ", std(E[l÷4:end]))
-    println("Mean center of mass: [", mean(cm[l÷4:3:end-2]), ", ", mean(cm[l÷4+1:3:end-1]), ", ", mean(cm[l÷4+2:3:end]), "]")
+    println("Specific heat: ", cv)
     println()
 end
 
