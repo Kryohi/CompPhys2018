@@ -1,9 +1,16 @@
 module MC
 
 ## TODO
+# calcolo giusto di varianza (manca M)
 # sostituire check equilibrium con convoluzione per smoothing e derivata discreta
-# ottimizzare e parallelizzare
+# parallelizzare e ottimizzare
+# kernel openCL?
 # provare a riscrivere in C loop simulazione
+# individuare zona di transizione di fase con loop su temperature
+# implementare reweighting per raffinare picco
+# trovare picco per diverse ρ
+# grafici
+# profit
 
 
 using ProgressMeter, DataFrames, CSV, Plots
@@ -20,13 +27,16 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function simulation(; N=256, T=2.0, rho=1.3, Df=1/200, fstep=1, maxsteps=10^4, anim=false, csv=true)
+function simulation(; N=256, T=2.0, rho=1.3, Df=1/20, fstep=1, maxsteps=10^4, anim=false, csv=true)
 
     L = cbrt(N/rho)
-    D = L*Df
+    Na = cbrt(N/4)
+    a = L / Na
+    D = a*Df    # Δ lo scegliamo come frazione di passo reticolare (per ora)
     X = initializeSystem(N, L, T)
-    X, jeq = equilibrium(X, D, T, L)
-    make3Dplot(X,T=T,rho=rho)
+    jeq = nothing
+    #X, jeq = equilibrium(X, D, T, L)
+    #make3Dplot(X,T=T,rho=rho)
     Y = zeros(3N)
     j = zeros(Int64, maxsteps)
     XX = zeros(3N, Int(maxsteps/fstep)) # storia delle posizioni
@@ -60,11 +70,11 @@ function simulation(; N=256, T=2.0, rho=1.3, Df=1/200, fstep=1, maxsteps=10^4, a
         next!(prog)
     end
 
-    prettyPrint(L, rho, U, P2, CM)
+    prettyPrint(L, rho, U.+3N*T/2, P2.+rho*T, CM)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
-    anim && makeVideo(XX, T=T, rho=rho)
+    anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return XX, CM, U.+3N*T/2, P2.+rho*T, jeq, j./(3N)
+    return XX, CM, U.+3N*T/2, P2.+rho*T, cv(E), jeq, j./(3N)
 end
 
 
@@ -72,9 +82,7 @@ end
 ## Initialization
 ##
 
-# Initialize the system at t=0 as a perfect FCC crystal centered in 0, plus adimensional
-# maxwell-boltzmann velocities
-# suppongo non serva più?
+# Initialize the system at t=0 as a perfect FCC crystal centered in 0
 function initializeSystem(N::Int, L, T)
     Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
@@ -90,12 +98,6 @@ function initializeSystem(N::Int, L, T)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    σ = sqrt(T)     #  in qualche unità di misura
-    V = vecboxMuller(σ,3N)
-    # force the average velocity to 0
-    V[1:3:N-2] .-= 3*sum(V[1:3:N-2])/N   # capire perch serve il 3 e perchè T cambia
-    V[2:3:N-1] .-= 3*sum(V[2:3:N-1])/N
-    V[3:3:N] .-= 3*sum(V[3:3:N])/N
     return X
 end
 
@@ -111,7 +113,7 @@ function equilibrium(X::Array{Float64}, D::Float64, T::Float64, L::Float64)
         shiftSystem!(Y,L)
         # P[Y]/P[X]
         @show ap = exp((energy(X,L) - energy(Y,L))/T)
-        @show η = rand(3N)
+        η = rand(3N)
         for i = 1:3N
             if η[i] < ap
                 X[i] = Y[i]
@@ -238,6 +240,12 @@ function orderParameter(XX, rho)
     return mean(ordPar)
 end
 
+avgSquares(A::Array{Float64}) = mean(A.*A)
+variance(A::Array{Float64}) = (avgSquares(A)-mean(A)^2)/(length(A)-1) # lenghth(A) è da cambiare
+
+cv(H::Array{Float64}, T::Float64) = variance(H)/T^2 + 1.5T
+
+
 ## -------------------------------------
 ## Visualization
 ##
@@ -257,7 +265,7 @@ end
 
 # makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
 # don't run this with more than ~1000 frames unless you have a lot of spare time...
-function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=false)
+function makeVideo(M; T=-1, rho=-1, fps = 30, D=-1.0, showCM=false)
     close("all")
     Plots.default(size=(1280,1080))
     N = Int(size(M,1)/3)
@@ -273,7 +281,7 @@ function makeVideo(M; T=-1, rho=-1, fps = 30, showCM=false)
         end
         next!(prog) # increment the progress bar
     end
-    file = string("./Video/LJ",N,"_T",T,"_d",rho,".mp4")
+    file = string("./Video/LJ",N,"_T",T,"_d",rho,"_D",D,".mp4")
     mp4(anim, file, fps = fps)
     gui() #show the last frame in a separate window
 end
@@ -311,9 +319,9 @@ end
 
 function prettyPrint(L, rho, E, P, cm)
     l = length(P)
-    println("\nPressure: ", mean(P[l÷3:end]), " ± ", std(P[l÷3:end])/sqrt(l*2/3))
-    println("Mean energy: ", mean(E[l÷3:end]), " ± ", std(E[l÷3:end])/sqrt(l*2/3))
-    println("Mean center of mass: [", mean(cm[l÷3:3:end-2]), ", ", mean(cm[l÷3+1:3:end-1]), ", ", mean(cm[l÷3+2:3:end]), "]")
+    println("\nPressure: ", mean(P[l÷4:end]), " ± ", std(P[l÷4:end]))
+    println("Mean energy: ", mean(E[l÷4:end]), " ± ", std(E[l÷4:end]))
+    println("Mean center of mass: [", mean(cm[l÷4:3:end-2]), ", ", mean(cm[l÷4+1:3:end-1]), ", ", mean(cm[l÷4+2:3:end]), "]")
     println()
 end
 

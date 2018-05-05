@@ -10,5 +10,5 @@ push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 
 #@time XX, jj, je = HO.oscillators(N=1000, D=3.5, T0=10.0, maxsteps=2030)
 
-@time XX, CM, EE, PP, je, jj = MC.simulation(N=500, T=2.0, rho=0.1, maxsteps=5000,
- fstep=10, Df=1/150, anim=true, csv=false)
+@time XX, CM, EE, PP, CV, je, jj = MC.simulation(N=500, T=2.0, rho=0.1, maxsteps=15000,
+ fstep=30, Df=1/8, anim=true, csv=false)
