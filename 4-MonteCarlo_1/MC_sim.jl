@@ -31,16 +31,17 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
 function simulation(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, anim=false, csv=true)
 
+    Y = zeros(3N)   # array of proposals
+    j = zeros(Int64, maxsteps)  # array di frazioni accettate
+    XX = zeros(3N, Int(maxsteps/fstep)) # positions history
+    U = zeros(Int(maxsteps/fstep)) # array of total energy
+    P2 = zeros(U)   # virial pressure
+
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D, jbi = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
     @show D/a
-    Y = zeros(3N)   # array of proposals
-    j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = zeros(Int(maxsteps/fstep)) # array of total energy
-    P2 = zeros(U)
     println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -51,11 +52,9 @@ function simulation(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, an
             U[i] = energy(X,L)
             XX[:,i] = X
         end
-        # Proposta
-        Y .= X .+ D.*(rand(3N).-0.5)
+        Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
-        # P[Y]/P[X]
-        ap = exp((energy(X,L) - energy(Y,L))/T)
+        ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
         η = rand(3N)
         for i = 1:length(X)
             if η[i] < ap
