@@ -9,7 +9,7 @@ module MC
 # parallelizzare e ottimizzare
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
-# individuare zona di transizione di fase con loop su temperature
+# individuare zona di transizione di fase (con cv) con loop su temperature
 # implementare reweighting per raffinare picco
 # trovare picco per diverse ρ
 # grafici
@@ -32,7 +32,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 # Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
 # saves the positions arrays every fstep iterations, returns and saves it as a csv file
 # and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4, anim=false, csv=false)
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4, anim=false, csv=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -43,13 +43,13 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4,
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
+    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
-        if (n-1)%fstep == 0
+        if (n-1)%fstep == 0 #forse da eliminare
             i = cld(n,fstep)
             P2[i] = vpressure(X,L)
             U[i] = energy(X,L)
@@ -67,14 +67,19 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/20, fstep=1, maxsteps=10^4,
         end
         next!(prog)
     end
-
     H = U.+3N*T/2
-    CV = cv(H,T)
-    prettyPrint(T, rho, H, P2.+rho*T, CV)
+    P = P2.+rho*T
+
+    C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
+    @show τ = sum(C_H)
+    @show CV = cv(H,T,τ)
+    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+
+    prettyPrint(T, rho, H, P, CV)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P2.+rho*T, CV, jbi, j./(3N)
+    return nothing, H, P, CV, jbi, j./(3N), C_H, CV, CVignorante
 end
 
 ## WIP: doesn't really work yet
@@ -90,7 +95,7 @@ function metropolis_MT(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
+    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     println()
 
@@ -123,11 +128,11 @@ function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L)  # evolve until at equilibrium, while tuning Δ
+    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     println()
 
-    function metropolis(X::Array{Float64}, seed::Int, steps::Int64)
+    function metropolis(X::Array{Float64}, seed::Int, steps::Int64) # da portare fuori prima o poi
         Y = zeros(3N)   # array of proposals
         E, P2, j = 0.0, 0.0, 0.0
         srand(seed)
@@ -160,6 +165,8 @@ function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
     return H, P, CV, jbi, mean(j)/3N
 end
 
+function metropolis_GPU(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
+end
 
 ## -------------------------------------
 ## Initialization
@@ -185,20 +192,26 @@ function initializeSystem(N::Int, L, T)
 end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
-function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64)
-    eqstepsmax = 2000
+function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
+    maxstepseq = 16000
+    wnd = 1000
+    k_max = 300
     N = Int(length(X)/3)
-    Na = cbrt(N/4)
-    a = L / Na
-    j = zeros(eqstepsmax)
-    jm = zeros(eqstepsmax÷50)
+    j = zeros(maxstepseq)
+    jm = zeros(maxstepseq÷wnd)
     Y = zeros(3N)
-    @inbounds for n=1:eqstepsmax
+    U = zeros(maxstepseq)
+    C_H_tot = []
+    τ = zeros(maxstepseq÷wnd)
+    DD = zeros(maxstepseq÷wnd*k_max)    # solo per grafico stupido
+    D_chosen = D    # D da restituire, minimizza autocorrelazione
+
+    @inbounds for n=1:maxstepseq
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
         # P[Y]/P[X]
-        @show ap = exp((energy(X,L) - energy(Y,L))/T)
+        ap = exp((energy(X,L) - energy(Y,L))/T)
         η = rand(3N)
         for i = 1:3N
             if η[i] < ap
@@ -206,22 +219,54 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64)
                 j[n] += 1
             end
         end
-        if n%50 == 0
-            @show jm[n÷50+1] = mean(j[(n-49):n])./(3N)
-            # se la differenza della media di due blocchi è meno di due centesimi
-            # della variazione massima di j, equilibrio raggiunto
-            #if abs(jm[n÷50+1]-jm[n÷50]) / (maximum(j)-minimum(j[j.>0])) < 0.02
-            if jm[n÷50+1] > 0.5 && jm[n÷50+1] < 0.65
-                return X, D, j[1:n]     # da sostituire con check equilibrio termodinamico
-            elseif jm[n÷50+1] < 0.55
-                @show D -= a/100
+        U[n] = energy(X,L)
+        H = U.+3N*T/2
+
+        if n%wnd == 0
+            DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per garfico stupido
+            meanH = mean(H[n-wnd:n])
+            C_H_temp = zeros(k_max)
+            C_H = ones(k_max)
+
+            for k = 1:k_max
+                for i = n-wnd+1:n-k_max-1
+                    C_H_temp[k] += H[i]*H[i+k]
+                end
+                C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
+                C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+            end
+            C_H_tot = [C_H_tot; C_H]
+
+            @show τ[n÷wnd] = sum(C_H)
+            @show CV = cv(H,T,τ[n÷wnd])
+
+            @show jm[n÷wnd+1] = mean(j[(n-wnd+1):n])./(3N)
+            if jm[n÷wnd+1] > 0.42 && jm[n÷wnd+1] < 0.666
+                if n>wnd*2  # if acceptance rate is good, tune Δ to minimize autocorrelation
+                    @show τ[n÷wnd] - τ[n÷wnd+1]
+                    if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
+                        @show D_chosen = D
+                        @show D -= a/300
+                    else
+                        @show D += a/300
+                    end
+                end
+                #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
+            elseif jm[n÷wnd+1] < 0.42
+                @show D -= a/150
             else
-                @show D += a/100
+                @show D += a/150
             end
         end
     end
+    @show length(C_H_tot)
+    boh = plot(C_H_tot)
+    plot!(boh, DD.*30)
+    plot!(boh, 1:k_max:(maxstepseq÷wnd*k_max), τ./100)
+    gui()
     warn("It seems equilibrium was not reached")
-    return X, D, j./(3N)
+    @show D, D_chosen
+    return X, D_chosen, j./(3N)
 end
 
 
@@ -239,6 +284,22 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
 end
 
+function autocorrelation(H::Array{Float64,1}, k_max::Int64)
+
+    meanH = mean(H)
+    C_H_temp = zeros(k_max)
+    C_H = zeros(k_max)
+
+    for k = 1:k_max
+        for i = 1:length(H)-k_max-1
+            C_H_temp[k] += H[i]*H[i+k]
+        end
+        C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
+        C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+    end
+    return C_H
+    #@show return τ = sum(C_H)
+end
 
 ## -------------------------------------
 ## Thermodinamic Properties
@@ -256,14 +317,12 @@ function energy(r,L)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                V += LJ(sqrt(dr2))
+                V += LJ(sqrt(dr2))  # cambiare togliendo LJ
             end
         end
     end
     return V
 end
-
-@fastmath @inbounds temperature(V) = sum(V.^2)/(length(V)/3)   # *m/k se si usano quantità vere
 
 @fastmath function vpressure(r,L)
     P = 0.0
@@ -277,12 +336,17 @@ end
             dz = dz - L*round(dz/L)
             dr2 = dx^2 + dy^2 + dz^2
             if dr2 < L*L/4
-                P += der_LJ(sqrt(dr2))*dr2
+                P += der_LJ(sqrt(dr2))*dr2  # cambiare togliendo LJ
             end
         end
     end
     return -P/(3L^3)
 end
+
+
+variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
+
+cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
 
 
 function orderParameter(XX, rho)
@@ -310,11 +374,6 @@ function orderParameter(XX, rho)
     ordPar = mean((cos.(K.*dr)),2)
     return mean(ordPar)
 end
-
-avgSquares(A::Array{Float64}) = mean(A.*A)
-variance(A::Array{Float64}) = (avgSquares(A)-mean(A)^2)/(length(A)-1) # lenghth(A) è da cambiare
-
-cv(H::Array{Float64}, T::Float64) = variance(H)/T^2 + 1.5T
 
 
 ## -------------------------------------
