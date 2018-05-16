@@ -7,6 +7,7 @@ module MC
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
+# autocorrelazione in modo più furbo
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -230,7 +231,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
 
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += H[i]*H[i+k]
+                    C_H_temp[k] += H[i]*H[i+k-1]
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
                 C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
@@ -243,7 +244,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             @show jm[n÷wnd+1] = mean(j[(n-wnd+1):n])./(3N)
             if jm[n÷wnd+1] > 0.42 && jm[n÷wnd+1] < 0.666
                 if n>wnd*2  # if acceptance rate is good, tune Δ to minimize autocorrelation
-                    @show τ[n÷wnd] - τ[n÷wnd+1]
+                    @show τ[n÷wnd] - τ[n÷wnd-1]
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
                         @show D -= a/300
@@ -292,7 +293,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64)
 
     for k = 1:k_max
         for i = 1:length(H)-k_max-1
-            C_H_temp[k] += H[i]*H[i+k]
+            C_H_temp[k] += H[i]*H[i+k-1]
         end
         C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
         C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
@@ -345,6 +346,7 @@ end
 
 
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
+variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
 
 cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
 

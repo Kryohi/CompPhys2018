@@ -11,7 +11,7 @@ using Plots, DataFrames, ProgressMeter, CSV
 #@time XX, jj, je = HO.oscillators(N=1000, D=3.5, T0=10.0, maxsteps=2030)
 
 @time XX, EE, PP, CV, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=2.0,
- rho=0.1, maxsteps=10000, fstep=1, Df=1/60)
+ rho=0.1, maxsteps=15000, fstep=1, Df=1/60)
 
 @time E, P, CV, je, jj = MC.metropolis_MP(N=500, T=2.0, rho=0.1, maxsteps=2000, Df=1/50)
 
