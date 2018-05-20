@@ -247,16 +247,16 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                     @show τ[n÷wnd] - τ[n÷wnd-1]
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
-                        @show D -= a/300
+                        @show D = D*0.85
                     else
-                        @show D += a/300
+                        @show D = D*1.15
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
             elseif jm[n÷wnd+1] < 0.42
-                @show D -= a/150
+                @show D = D*0.50
             else
-                @show D += a/150
+                @show D = D*1.5
             end
         end
     end
