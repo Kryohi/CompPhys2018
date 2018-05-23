@@ -42,7 +42,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     P2 = zeros(U)   # virial pressure
 
     L = cbrt(N/rho)
-    X, a = initializeSystem(N, L, T)   # creates FCC crystal
+    X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
     @show D/a
@@ -59,11 +59,16 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
         ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-        η = rand(3N)
-        for i = 1:length(X)
-            if η[i] < ap
-                X[i] = Y[i]
-                j[n] += 1
+        if ap > 1
+            X[i] = Y[i]
+            j[n] += 1
+        else
+            η = rand(3N)
+            for i = 1:length(X)
+                if η[i] < ap
+                    X[i] = Y[i]
+                    j[n] += 1
+                end
             end
         end
         next!(prog)
@@ -74,9 +79,9 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    @show CVignorante = variance(H[1:160:end])/T^2 + 1.5T
 
-    prettyPrint(T, rho, H, P, CV)
+    prettyPrint(T, rho, H, P, CV, τ)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -174,7 +179,7 @@ end
 ##
 
 # Initialize the system at t=0 as a perfect FCC crystal centered in 0
-function initializeSystem(N::Int, L, T)
+function initializeSystem(N::Int, L)
     Na = round(Int,cbrt(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
     !isapprox(Na, cbrt(N/4)) && error("Can't make a cubic FCC crystal with this N :(")
@@ -189,6 +194,7 @@ function initializeSystem(N::Int, L, T)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
+    X += (rand(3N) - .5) .* (a/5)
     return X, a
 end
 
@@ -239,24 +245,28 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             C_H_tot = [C_H_tot; C_H]
 
             @show τ[n÷wnd] = sum(C_H)
+            if τ[n÷wnd] < 100
+                info("Victory")
+                @show τ[n÷wnd], D
+            end
             @show CV = cv(H,T,τ[n÷wnd])
 
             @show jm[n÷wnd+1] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd+1] > 0.42 && jm[n÷wnd+1] < 0.666
+            if jm[n÷wnd+1] > 0.2 && jm[n÷wnd+1] < 0.6
                 if n>wnd*2  # if acceptance rate is good, tune Δ to minimize autocorrelation
                     @show τ[n÷wnd] - τ[n÷wnd-1]
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
-                        @show D -= a/300
+                        @show D = D*1.15
                     else
-                        @show D += a/300
+                        @show D = D*1.1
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
-            elseif jm[n÷wnd+1] < 0.42
-                @show D -= a/150
+            elseif jm[n÷wnd+1] < 0.2
+                @show D = D*0.7
             else
-                @show D += a/150
+                @show D = D*1.3
             end
         end
     end
@@ -442,10 +452,10 @@ end
 ## Miscellaneous
 ##
 
-function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, cv::Float64)
+function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, cv::Float64, τ)
     l = length(P)
-    println("\nPressure: ", mean(P[l÷4:end]), " ± ", std(P[l÷4:end]))
-    println("Mean energy: ", mean(E[l÷4:end]), " ± ", std(E[l÷4:end]))
+    println("\nPressure: ", mean(P), " ± ", sqrt(variance2(P,τ)))
+    println("Mean energy: ", mean(E), " ± ", std(E))
     println("Specific heat: ", cv)
     println()
 end
