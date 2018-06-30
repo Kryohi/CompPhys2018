@@ -59,16 +59,11 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
         ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-        if ap > 1
-            X[i] = Y[i]
-            j[n] += 1
-        else
-            η = rand(3N)
-            for i = 1:length(X)
-                if η[i] < ap
-                    X[i] = Y[i]
-                    j[n] += 1
-                end
+        η = rand(3N)
+        for i = 1:length(X)
+            if η[i] < ap
+                X[i] = Y[i]
+                j[n] += 1
             end
         end
         next!(prog)
