@@ -27,10 +27,8 @@ any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
-# Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
-# saves the positions arrays every fstep iterations, returns and saves it as a csv file
-# and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4, anim=false, csv=false)
+# Main function, it creates the initial system, runs a (long) burn-in for thermalization and Δ seclection and then runs a Monte Carlo simulation for maxsteps
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -79,7 +77,6 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     end
 
     prettyPrint(T, rho, H, P, CV, τ)
-    csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return nothing, H, P, j./(3N), C_H, CV, CVignorante
