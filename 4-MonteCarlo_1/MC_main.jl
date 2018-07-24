@@ -11,11 +11,9 @@ import MC
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
-#@time XX, jj, je = HO.oscillators(N=1000, D=3.5, T0=10.0, maxsteps=2030)
 
-@time XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=1.2,
- rho=0.2, maxsteps=180000, fstep=1, Df=1/70)
-
+#@time XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=1.2,
+# rho=0.2, maxsteps=180000, fstep=1, Df=1/70)
 
 ##
 ## Simulazioni multiple
@@ -26,6 +24,7 @@ import MC
 
     XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=180000, fstep=1, Df=1/60)
 
+    saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
     #op = Sim.orderParameter(XX, rho)
@@ -33,10 +32,17 @@ import MC
     return P, dP, E, dE, CV, CV2
 end
 
+function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
+    data = DataFrame(E=EE, P=PP, CVcorr=CV, CV=CV2, Ch=C_H)
+    file = string("./Data/MC_",N,"_rho",rho,"_T",T,".csv")
+    CSV.write(file, data)
+    info("System saved in ", file)
+end
+
 T = [0.1:0.05:0.6; 0.7:0.1:1.5]
 #T = 0.2:0.1:1.4
 N = 108
-ρ = 0.5
+ρ = 0.4
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -48,5 +54,7 @@ E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 CV = [ x[5] for x in result ]
 CVignorante = [ x[6] for x in result ]
 
-plot(T,CVignorante)
+P1 = plot(T,CVignorante)
 gui()
+file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
+savefig(P1,file)

@@ -210,7 +210,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
-    for n=1:maxsteps
+    @inbounds for n=1:maxsteps
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
@@ -476,12 +476,6 @@ function avg3D(A::Array{Float64,1})
     return [sum(A[1:3:N-2]), sum(A[2:3:N-1]), sum(A[3:3:N])]./N
 end
 
-function saveCSV(M; N="???", T="???", rho="???")
-    D = convert(DataFrame, M)
-    file = string("./Data/positions_",N,"_T",T,"_d",rho,".csv")
-    CSV.write(file, D)
-    info("System saved in ", file)
-end
 
 # creates an array with length N of gaussian distributed numbers using Box-Muller
 function vecboxMuller(sigma, N::Int, x0=0.0)
