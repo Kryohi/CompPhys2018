@@ -80,7 +80,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P, CV, jbi, j./(3N), C_H, CV, CVignorante
+    return nothing, H, P, jbi, j./(3N), C_H, CV, CVignorante
 end
 
 ## WIP: doesn't really work yet
@@ -259,16 +259,16 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                 if n>wnd*2
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
-                        @show D = D*(rand()/4 - 0.125)
+                        @show D = D*(1 + rand()/4 - 0.125)
                     else
                         @show D = D*1.1
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
             elseif jm[n÷wnd] < 0.25
-                @show D = D*0.6
+                @show D = D*0.7
             else
-                @show D = D*1.4
+                @show D = D*1.3
             end
         end
     end
