@@ -240,6 +240,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             C_H_temp = zeros(k_max)
             C_H = ones(k_max)
 
+            # da sostituire con correlation() ?
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
                     C_H_temp[k] += H[i]*H[i+k-1]
