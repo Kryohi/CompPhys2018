@@ -71,7 +71,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 150)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 200)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
     @show CVignorante = variance(H[1:160:end])/T^2 + 1.5T
@@ -194,6 +194,7 @@ function initializeSystem(N::Int, L)
 end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
+# DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
     maxstepseq = 80000
     wnd = 10000
@@ -253,18 +254,18 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd] > 0.2 && jm[n÷wnd] < 0.6
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.6
                 # if acceptance rate is good, tune Δ to minimize autocorrelation
                 if n>wnd*2
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
-                        @show D = D*1.15
+                        @show D = D*(rand()/4 - 0.125)
                     else
                         @show D = D*1.1
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
-            elseif jm[n÷wnd] < 0.2
+            elseif jm[n÷wnd] < 0.25
                 @show D = D*0.6
             else
                 @show D = D*1.4
