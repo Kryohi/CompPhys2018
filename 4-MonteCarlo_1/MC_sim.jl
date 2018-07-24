@@ -20,7 +20,7 @@ if VERSION >= v"0.7-"   # su julia master Plots non si compila ¯\_(ツ)_/¯
     using Dates, ProgressMeter
 else
     using DataFrames, CSV, ProgressMeter, PyCall, Plots
-    gr(size=(800, 600))
+    pyplot(size=(800, 600))
     fnt = "sans-serif"
     default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 end
@@ -44,7 +44,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
+    X, D, jbi = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     println()
 
@@ -71,16 +71,16 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 200)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:160:end])/T^2 + 1.5T
+    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
 
     prettyPrint(T, rho, H, P, CV, τ)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P, CV, jbi, j./(3N), C_H, CV, CVignorante
+    return nothing, H, P, jbi, j./(3N), C_H, CV, CVignorante
 end
 
 ## WIP: doesn't really work yet
@@ -195,23 +195,22 @@ end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
 # DA RISCRIVERE USANDO 2 LOOP
-function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
-    maxstepseq = 120000
-    wnd = 12000
-    k_max = 250  # distanza per autocorrelazione
+function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
+
+    wnd = maxsteps ÷ 10
+    k_max = 500  # distanza per autocorrelazione
     N = Int(length(X)/3)
-    j = zeros(maxstepseq)
-    jm = zeros(maxstepseq÷wnd)
+    j = zeros(maxsteps)
+    jm = zeros(maxsteps÷wnd)
     Y = zeros(3N)
-    U = zeros(maxstepseq)
-    H = zeros(maxstepseq)
+    U = zeros(maxsteps)
+    H = zeros(maxsteps)
     C_H_tot = []
-    τ = zeros(maxstepseq÷wnd)
-    DD = zeros(maxstepseq÷wnd*k_max)    # solo per grafico stupido
-    HH = []    # solo per grafico stupido
+    τ = zeros(maxsteps÷wnd)
+    DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
-    for n=1:maxstepseq
+    for n=1:maxsteps
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
@@ -259,23 +258,23 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                 if n>wnd*2
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
-                        @show D = D*(rand()/4 - 0.125)
+                        @show D = D*(1 + rand()/4 - 0.125)
                     else
                         @show D = D*1.1
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
             elseif jm[n÷wnd] < 0.25
-                @show D = D*0.6
+                @show D = D*0.7
             else
-                @show D = D*1.4
+                @show D = D*1.3
             end
         end
     end
 
     boh = plot(C_H_tot, reuse = false)
     plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxstepseq÷wnd*k_max), τ./100)
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./100)
     gui()
     warn("It seems equilibrium was not reached")
     @show D, D_chosen

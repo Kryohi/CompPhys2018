@@ -13,10 +13,8 @@ import MC
 
 #@time XX, jj, je = HO.oscillators(N=1000, D=3.5, T0=10.0, maxsteps=2030)
 
-@time XX, EE, PP, CV, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=1.5,
- rho=0.05, maxsteps=80000, fstep=1, Df=1/60)
-
-#@time E, P, CV, je, jj = MC.metropolis_MP(N=500, T=2.0, rho=0.1, maxsteps=2000, Df=1/50)
+@time XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=1.2,
+ rho=0.2, maxsteps=180000, fstep=1, Df=1/70)
 
 
 ##
@@ -26,7 +24,7 @@ import MC
 @everywhere function parallelPV(rho, N, T, Tarray)
     println("Run ", find(Tarray.==T)[1], "/", length(Tarray))
 
-    XX, EE, PP, CV, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=20000, fstep=1, Df=1/60)
+    XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=180000, fstep=1, Df=1/60)
 
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
@@ -36,19 +34,19 @@ import MC
 end
 
 T = [0.01:0.01:0.15; 0.2:0.1:0.82]
-T = 0.1:0.1:2.0
+T = 0.2:0.1:1.4
 N = 108
-ρ = 1.5
+ρ = 0.5
 V = N./ρ
 
-# # map the parallelPV function to the ρ array
-# @time result = pmap(T0 -> parallelPV(ρ, N, T0, T), T)
-#
-# # extract the resulting arrays from the result tuple
-# P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
-# E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
-# CV = [ x[5] for x in result ]
-# CVignorante = [ x[6] for x in result ]
-#
-# plot(T,CVignorante)
-# gui()
+# map the parallelPV function to the ρ array
+@time result = pmap(T0 -> parallelPV(ρ, N, T0, T), T)
+
+# extract the resulting arrays from the result tuple
+P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
+E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
+CV = [ x[5] for x in result ]
+CVignorante = [ x[6] for x in result ]
+
+plot(T,CVignorante)
+gui()
