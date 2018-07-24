@@ -20,7 +20,7 @@ if VERSION >= v"0.7-"   # su julia master Plots non si compila ¯\_(ツ)_/¯
     using Dates, ProgressMeter
 else
     using DataFrames, CSV, ProgressMeter, PyCall, Plots
-    pyplot(size=(800, 600))
+    gr(size=(800, 600))
     fnt = "sans-serif"
     default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
 end
@@ -196,8 +196,8 @@ end
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
 # DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
-    maxstepseq = 80000
-    wnd = 10000
+    maxstepseq = 120000
+    wnd = 12000
     k_max = 250  # distanza per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxstepseq)
@@ -246,7 +246,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
 
             # solo per controllare che cacchio sta succedendo
             @show τ[n÷wnd] = sum(C_H)
-            if 0 < τ[n÷wnd] < 100
+            if τ[n÷wnd] < 100 && τ[n÷wnd] > 0
                 info("Victory")
                 @show τ[n÷wnd], D
             end
