@@ -1,13 +1,10 @@
 module MC
 
 ## TODO
-# capire come far raggiungere l'equilibrio più in fretta, e se davvero E deve raggiungerlo
-# raffinare scelta D, sia come parametri evolutivi che con metodo varianza
-# calcolo giusto di varianza (manca M)
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo
+# autocorrelazione in modo più furbo (Wiener–Khinchin?)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -45,8 +42,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
+    @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
