@@ -22,7 +22,7 @@ import MC
 @everywhere function parallelPV(rho, N, T, Tarray)
     println("Run ", find(Tarray.==T)[1], "/", length(Tarray))
 
-    XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=180000, fstep=1, Df=1/60)
+    XX, EE, PP, je, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=200000, fstep=1, Df=1/60)
 
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)

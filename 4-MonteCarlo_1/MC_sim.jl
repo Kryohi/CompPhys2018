@@ -44,7 +44,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
     @show D/a
     println()
 
@@ -74,13 +74,19 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+
+    # se energia è calcolata solo ogni tot passi, modalità "very fast varianza"
+    if fstep == 1
+        @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    else
+        @show CVignorante = variance(H)/T^2 + 1.5T
+    end
 
     prettyPrint(T, rho, H, P, CV, τ)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P, jbi, j./(3N), C_H, CV, CVignorante
+    return nothing, H, P, j./(3N), C_H, CV, CVignorante
 end
 
 ## WIP: doesn't really work yet
@@ -280,7 +286,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     @show D, D_chosen
 
     plot!(H./H[1])
-    return X, D_chosen, j./(3N)
+    return X, D_chosen
 end
 
 
