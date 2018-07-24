@@ -71,7 +71,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 150)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
     @show CVignorante = variance(H[1:160:end])/T^2 + 1.5T
@@ -195,20 +195,22 @@ end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
 function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
-    maxstepseq = 16000
-    wnd = 1000
-    k_max = 300
+    maxstepseq = 80000
+    wnd = 10000
+    k_max = 250  # distanza per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxstepseq)
     jm = zeros(maxstepseq÷wnd)
     Y = zeros(3N)
     U = zeros(maxstepseq)
+    H = zeros(maxstepseq)
     C_H_tot = []
     τ = zeros(maxstepseq÷wnd)
     DD = zeros(maxstepseq÷wnd*k_max)    # solo per grafico stupido
+    HH = []    # solo per grafico stupido
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
-    @inbounds for n=1:maxstepseq
+    for n=1:maxstepseq
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
@@ -223,10 +225,12 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
         end
         U[n] = energy(X,L)
         H = U.+3N*T/2
+        #push!(HH, H)
 
+        # ogni wnd passi calcola autocorrelazione e aggiorna D
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per garfico stupido
-            meanH = mean(H[n-wnd:n])
+            meanH = mean(H[n-wnd+1:n])
             C_H_temp = zeros(k_max)
             C_H = ones(k_max)
 
@@ -239,17 +243,19 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             end
             C_H_tot = [C_H_tot; C_H]
 
+            # solo per controllare che cacchio sta succedendo
             @show τ[n÷wnd] = sum(C_H)
-            if τ[n÷wnd] < 100
+            if 0 < τ[n÷wnd] < 100
                 info("Victory")
                 @show τ[n÷wnd], D
             end
             @show CV = cv(H,T,τ[n÷wnd])
 
-            @show jm[n÷wnd+1] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd+1] > 0.2 && jm[n÷wnd+1] < 0.6
-                if n>wnd*2  # if acceptance rate is good, tune Δ to minimize autocorrelation
-                    @show τ[n÷wnd] - τ[n÷wnd-1]
+            # check sulla media di passi accettati nella finestra attuale
+            @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
+            if jm[n÷wnd] > 0.2 && jm[n÷wnd] < 0.6
+                # if acceptance rate is good, tune Δ to minimize autocorrelation
+                if n>wnd*2
                     if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
                         @show D_chosen = D
                         @show D = D*1.15
@@ -258,20 +264,22 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                     end
                 end
                 #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
-            elseif jm[n÷wnd+1] < 0.2
-                @show D = D*0.7
+            elseif jm[n÷wnd] < 0.2
+                @show D = D*0.6
             else
-                @show D = D*1.3
+                @show D = D*1.4
             end
         end
     end
-    @show length(C_H_tot)
-    boh = plot(C_H_tot)
+
+    boh = plot(C_H_tot, reuse = false)
     plot!(boh, DD.*30)
     plot!(boh, 1:k_max:(maxstepseq÷wnd*k_max), τ./100)
     gui()
     warn("It seems equilibrium was not reached")
     @show D, D_chosen
+
+    plot!(H./H[1])
     return X, D_chosen, j./(3N)
 end
 
@@ -290,7 +298,7 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
 end
 
-function autocorrelation(H::Array{Float64,1}, k_max::Int64)
+function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
 
     meanH = mean(H)
     C_H_temp = zeros(k_max)
@@ -306,6 +314,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64)
     return C_H
     #@show return τ = sum(C_H)
 end
+
 
 ## -------------------------------------
 ## Thermodinamic Properties
@@ -449,7 +458,7 @@ end
 
 function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, cv::Float64, τ)
     l = length(P)
-    println("\nPressure: ", mean(P), " ± ", sqrt(variance2(P,τ)))
+    println("\nPressure: ", mean(P), " ± ", sqrt(abs(variance2(P,τ))))
     println("Mean energy: ", mean(E), " ± ", std(E))
     println("Specific heat: ", cv)
     println()
