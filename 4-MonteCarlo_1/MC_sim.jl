@@ -1,13 +1,10 @@
 module MC
 
 ## TODO
-# capire come far raggiungere l'equilibrio più in fretta, e se davvero E deve raggiungerlo
-# raffinare scelta D, sia come parametri evolutivi che con metodo varianza
-# calcolo giusto di varianza (manca M)
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo
+# autocorrelazione in modo più furbo (Wiener–Khinchin?)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -30,10 +27,8 @@ any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
-# Main function, it creates the initial system, runs it through the vVerlet algorithm for maxsteps,
-# saves the positions arrays every fstep iterations, returns and saves it as a csv file
-# and optionally creates an animation of the particles (also doable at a later time from the XX output)
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4, anim=false, csv=false)
+# Main function, it creates the initial system, runs a (long) burn-in for thermalization and Δ seclection and then runs a Monte Carlo simulation for maxsteps
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -44,9 +39,8 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
+    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
@@ -74,13 +68,18 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+
+    # se energia è calcolata solo ogni tot passi, modalità "very fast varianza"
+    if fstep == 1
+        @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    else
+        @show CVignorante = variance(H)/T^2 + 1.5T
+    end
 
     prettyPrint(T, rho, H, P, CV, τ)
-    csv && saveCSV(XX', N=N, T=T, rho=rho)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P, jbi, j./(3N), C_H, CV, CVignorante
+    return nothing, H, P, j./(3N), C_H, CV, CVignorante
 end
 
 ## WIP: doesn't really work yet
@@ -210,7 +209,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
-    for n=1:maxsteps
+    @inbounds for n=1:maxsteps
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
@@ -234,6 +233,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             C_H_temp = zeros(k_max)
             C_H = ones(k_max)
 
+            # da sostituire con correlation() ?
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
                     C_H_temp[k] += H[i]*H[i+k-1]
@@ -280,7 +280,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     @show D, D_chosen
 
     plot!(H./H[1])
-    return X, D_chosen, j./(3N)
+    return X, D_chosen
 end
 
 
@@ -476,12 +476,6 @@ function avg3D(A::Array{Float64,1})
     return [sum(A[1:3:N-2]), sum(A[2:3:N-1]), sum(A[3:3:N])]./N
 end
 
-function saveCSV(M; N="???", T="???", rho="???")
-    D = convert(DataFrame, M)
-    file = string("./Data/positions_",N,"_T",T,"_d",rho,".csv")
-    CSV.write(file, D)
-    info("System saved in ", file)
-end
 
 # creates an array with length N of gaussian distributed numbers using Box-Muller
 function vecboxMuller(sigma, N::Int, x0=0.0)
