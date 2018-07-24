@@ -74,7 +74,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/80, fstep=1, maxsteps=10^4,
     C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:160:end])/T^2 + 1.5T
+    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
 
     prettyPrint(T, rho, H, P, CV, τ)
     csv && saveCSV(XX', N=N, T=T, rho=rho)
