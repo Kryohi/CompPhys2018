@@ -194,6 +194,7 @@ function initializeSystem(N::Int, L)
 end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
+# DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64)
     maxstepseq = 80000
     wnd = 10000
