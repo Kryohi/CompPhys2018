@@ -12,8 +12,8 @@ import MC
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
 
-#@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=1.2,
-# rho=0.2, maxsteps=180000, fstep=1, Df=1/70)
+@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
+ rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
 
 ##
 ## Simulazioni multiple

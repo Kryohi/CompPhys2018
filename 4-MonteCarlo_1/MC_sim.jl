@@ -1,6 +1,7 @@
 module MC
 
 ## TODO
+# scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
@@ -65,7 +66,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
 
@@ -205,7 +206,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     U = zeros(maxsteps)
     H = zeros(maxsteps)
     C_H_tot = []
-    τ = zeros(maxsteps÷wnd)
+    τ = ones(maxsteps÷wnd).*1e6
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
@@ -236,38 +237,32 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             # da sostituire con correlation() ?
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += H[i]*H[i+k-1]
+                    C_H_temp[k] += H[i]*H[i+k-1]    # -meanH a entrambi?
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+                C_H[k] = abs((C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)) # andrà bene l'abs?
             end
             C_H_tot = [C_H_tot; C_H]
 
             # solo per controllare che cacchio sta succedendo
             @show τ[n÷wnd] = sum(C_H)
-            if τ[n÷wnd] < 100 && τ[n÷wnd] > 0
-                info("Victory")
-                @show τ[n÷wnd], D
-            end
             #@show CV = cv(H,T,τ[n÷wnd])
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.6
-                # if acceptance rate is good, tune Δ to minimize autocorrelation
-                if n>wnd*2
-                    if τ[n÷wnd] < τ[n÷wnd-1] && τ[n÷wnd]>0
-                        @show D_chosen = D
-                        @show D = D*(1 + rand()/4 - 0.125)
-                    else
-                        @show D = D*1.1
-                    end
+            if jm[n÷wnd] > 0.2 && jm[n÷wnd] < 0.6
+                # if acceptance rate is good, choose D to minimize autocorrelation
+                if n>wnd*2 && τ[n÷wnd] < minimum(τ[1:n÷wnd-1]) && τ[n÷wnd]>0
+                    @show D_chosen = D
                 end
-                #return X, D, j[1:n]     # da mettere dopo check equilibrio termodinamico
-            elseif jm[n÷wnd] < 0.25
+                @show D = D*(1 + rand()/2 - 0.25)
+
+            elseif jm[n÷wnd] < 0.2
                 @show D = D*0.7
+                τ[n÷wnd] = 1e6
             else
                 @show D = D*1.3
+                τ[n÷wnd] = 1e6
             end
         end
     end
@@ -276,7 +271,6 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     plot!(boh, DD.*30)
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./100)
     gui()
-    warn("It seems equilibrium was not reached")
     @show D, D_chosen
 
     plot!(H./H[1])
