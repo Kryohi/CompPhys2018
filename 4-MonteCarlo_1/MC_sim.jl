@@ -249,7 +249,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                 info("Victory")
                 @show τ[n÷wnd], D
             end
-            @show CV = cv(H,T,τ[n÷wnd])
+            #@show CV = cv(H,T,τ[n÷wnd])
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
