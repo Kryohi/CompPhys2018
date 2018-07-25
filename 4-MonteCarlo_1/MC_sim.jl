@@ -65,7 +65,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 300)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 400)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
     @show CV = cv(H,T,τ)
 
@@ -239,7 +239,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                     C_H_temp[k] += H[i]*H[i+k-1]
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+                C_H[k] = abs(C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
             end
             C_H_tot = [C_H_tot; C_H]
 
@@ -276,7 +276,6 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     plot!(boh, DD.*30)
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./100)
     gui()
-    warn("It seems equilibrium was not reached")
     @show D, D_chosen
 
     plot!(H./H[1])
