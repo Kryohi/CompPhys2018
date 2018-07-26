@@ -40,10 +40,10 @@ end
     return P, dP, E, dE, CV, CV2
 end
 
-T = [0.1:0.025:0.6; 0.65:0.5:1.5]
+T = [0.05:0.025:0.6; 0.65:0.5:2.0]
 #T = 0.2:0.1:1.4
 N = 108
-ρ = 0.4
+ρ = 0.5
 V = N./ρ
 
 # map the parallelPV function to the ρ array
