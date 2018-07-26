@@ -3,6 +3,7 @@ if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
 
+using Plots, DataFrames, ProgressMeter, CSV
 @everywhere using Plots, DataFrames, ProgressMeter, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
@@ -12,8 +13,8 @@ import MC
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
 
-@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
- rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
+#@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
+# rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
 
 ##
 ## Simulazioni multiple
@@ -39,10 +40,10 @@ end
     return P, dP, E, dE, CV, CV2
 end
 
-T = [0.1:0.025:0.6; 0.65:0.5:1.5]
+T = [0.05:0.025:0.6; 0.65:0.5:2.0]
 #T = 0.2:0.1:1.4
 N = 108
-ρ = 0.4
+ρ = 0.5
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -54,11 +55,15 @@ E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 CV = [ x[5] for x in result ]
 CVignorante = [ x[6] for x in result ]
 
-data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVIgnorante)
-file = string("./Data/MC_",N,"_rho",rho,".csv")
+data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante)
+file = string("./Data/MC_",N,"_rho",ρ,".csv")
 CSV.write(file, data)
 
 P1 = plot(T,CVignorante)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
+savefig(P1,file)
+P2 = plot(T,CV)
+gui()
+file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
