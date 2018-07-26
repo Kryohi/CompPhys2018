@@ -198,7 +198,7 @@ end
 function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 10
-    k_max = 500  # distanza per autocorrelazione
+    k_max = 750  # distanza per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
     jm = zeros(maxsteps÷wnd)
@@ -240,7 +240,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                     C_H_temp[k] += H[i]*H[i+k-1]    # -meanH a entrambi?
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                C_H[k] = abs((C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)) # andrà bene l'abs?
+                C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
             end
             C_H_tot = [C_H_tot; C_H]
 

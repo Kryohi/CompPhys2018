@@ -3,6 +3,7 @@ if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
 
+using Plots, DataFrames, ProgressMeter, CSV
 @everywhere using Plots, DataFrames, ProgressMeter, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
@@ -12,8 +13,8 @@ import MC
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
 
-@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
- rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
+#@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
+# rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
 
 ##
 ## Simulazioni multiple
@@ -54,8 +55,8 @@ E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 CV = [ x[5] for x in result ]
 CVignorante = [ x[6] for x in result ]
 
-data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVIgnorante)
-file = string("./Data/MC_",N,"_rho",rho,".csv")
+data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante)
+file = string("./Data/MC_",N,"_rho",ρ,".csv")
 CSV.write(file, data)
 
 P1 = plot(T,CVignorante)
