@@ -368,7 +368,8 @@ function energy(r::Array{Float64,1},L::Float64)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                V += LJ(sqrt(dr2))  # cambiare togliendo LJ
+                #V += LJ(sqrt(dr2))
+                V += 4*(dr2^-6 - dr2^-3)
             end
         end
     end
