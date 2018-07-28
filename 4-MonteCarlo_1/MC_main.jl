@@ -13,8 +13,7 @@ import MC
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
 
-#@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
-# rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
+@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22, rho=0.3, maxsteps=20*10^4, Df=1/70)
 
 
 ##
@@ -31,7 +30,7 @@ end
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
 
-    XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=400000, fstep=1, Df=(1/70)*N/108)
+    XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=40*10^4, Df=(1/70)*N/108)
 
     info("Run ", find(Tarray.==T)[1], "finished, with tau = , ", sum(C_H))
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)

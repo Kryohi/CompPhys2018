@@ -34,8 +34,8 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    U = zeros(Int(maxsteps/fstep)) # array of total energy
-    P2 = zeros(U)   # virial pressure
+    U = zeros(j)    # array of total energy
+    P2 = zeros(j)   # virial pressure
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
@@ -63,23 +63,24 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     P = P2.+rho*T
 
     C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
-    @show τ = sum(C_H)
-    @show CV = cv(H,T,τ)
-    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
-
-    prettyPrint(T, rho, H, P, CV, τ)
+    τ = sum(C_H)
+    CV = cv(H,T,τ)
+    CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return nothing, H, P, j./(3N), C_H, CV, CVignorante
 end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
+# obviously cannot use τ
 function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
 
+    info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
     #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = zeros(Int(maxsteps/fstep)) # array of total energy
+    U = zeros(Int(maxsteps/fstep))  # array of total energy
     P2 = zeros(U)   # virial pressure
 
     L = cbrt(N/rho)
@@ -112,12 +113,10 @@ function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
     P = P2.+rho*T
 
     C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
-    @show τ = sum(C_H)
-    @show CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
-    @show CVignorante = variance(H)/T^2 + 1.5T
-
-    prettyPrint(T, rho, H, P, CV, τ)
-    anim && makeVideo(XX, T=T, rho=rho, D=D)
+    τ = sum(C_H)
+    CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
+    CVignorante = variance(H)/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
 
     return nothing, H, P, j./(3N), C_H, CV, CVignorante
 end
@@ -490,18 +489,22 @@ end
 ## Miscellaneous
 ##
 
-function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, cv::Float64, τ)
+function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, τ, cv, cv2)
     l = length(P)
     println("\nPressure: ", mean(P), " ± ", sqrt(abs(variance2(P,τ))))
     println("Mean energy: ", mean(E), " ± ", std(E))
     println("Specific heat: ", cv)
+    println("Specific heat (approximate) : ", cv2)
+    println("Average autocorrelation time: ", τ)
     println()
 end
-function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv::Float64)
+function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv, cv2)
     l = length(P)
     println("\nPressure: ", P, " ± ", 0.0)
     println("Mean energy: ", E, " ± ", 0.0)
     println("Specific heat: ", cv)
+    println("Specific heat (approximate) : ", cv2)
+    println("Average autocorrelation time: ", τ)
     println()
 end
 
