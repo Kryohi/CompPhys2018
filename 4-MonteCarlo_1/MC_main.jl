@@ -16,6 +16,7 @@ import MC
 #@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22,
 # rho=0.3, maxsteps=200000, fstep=1, Df=1/70)
 
+
 ##
 ## Simulazioni multiple
 ##
@@ -40,7 +41,7 @@ end
     return P, dP, E, dE, CV, CV2
 end
 
-T = [0.05:0.025:0.6; 0.65:0.5:2.0]
+T = [0.04:0.01:0.4; 0.42:0.02:1.26] # set per lavoro tutta notte
 #T = 0.2:0.1:1.4
 N = 108
 ρ = 0.5
@@ -59,7 +60,7 @@ data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante)
 file = string("./Data/MC_",N,"_rho",ρ,".csv")
 CSV.write(file, data)
 
-P1 = plot(T,CVignorante)
+P1 = plot(T,CVignorante, reuse = false)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)

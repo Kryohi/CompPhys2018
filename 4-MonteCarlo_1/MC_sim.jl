@@ -2,6 +2,7 @@ module MC
 
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
+# recuperare dati da fase di termalizzazione?
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
@@ -252,7 +253,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             if jm[n÷wnd] > 0.2 && jm[n÷wnd] < 0.6
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                if n>wnd*2 && τ[n÷wnd] < minimum(τ[1:n÷wnd-1]) && τ[n÷wnd]>0
+                if n>wnd*2 && τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])) && τ[n÷wnd]>0
                     @show D_chosen = D
                 end
                 @show D = D*(1 + rand()/2 - 0.25)
@@ -267,9 +268,9 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
         end
     end
 
-    boh = plot(C_H_tot, reuse = false)
+    boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false, reuse=false)
     plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./100)
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./200)
     gui()
     @show D, D_chosen
 
