@@ -34,8 +34,8 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    U = zeros(j)    # array of total energy
-    P2 = zeros(j)   # virial pressure
+    U = zeros(Float64, maxsteps)    # array of total energy
+    P2 = zeros(U)   # virial pressure
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
@@ -45,8 +45,8 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
-        P2[n] = vpressure(X,L)
         U[n] = energy(X,L)
+        P2[n] = vpressure(X,L)
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
         ap = exp((U[n] - energy(Y,L))/T)   # P[Y]/P[X]
@@ -252,11 +252,12 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
     @inbounds for n=1:maxsteps
+        U[n] = energy(X,L)
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
         # P[Y]/P[X]
-        ap = exp((energy(X,L) - energy(Y,L))/T)
+        ap = exp((U[n] - energy(Y,L))/T)
         η = rand(3N)
         for i = 1:3N
             if η[i] < ap
@@ -264,8 +265,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                 j[n] += 1
             end
         end
-        U[n] = energy(X,L)
-        H = U.+3N*T/2
+        H[n] = U[n]+3N*T/2
         #push!(HH, H)
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D
