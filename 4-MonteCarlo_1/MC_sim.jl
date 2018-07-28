@@ -74,6 +74,7 @@ end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
+# May be utterly useless
 function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
