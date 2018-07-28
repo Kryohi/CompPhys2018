@@ -360,7 +360,7 @@ variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
 cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
 
 
-function orderParameter(XX, rho)
+@fastmath function orderParameter(XX, rho)
     N = Int(size(XX,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
@@ -369,8 +369,8 @@ function orderParameter(XX, rho)
     dx = zeros(Na^3*3,size(r,2))
     dy = zeros(dx)
     dz = zeros(dx)
-    for k=0:Na^3-1
-        @inbounds for i=1:3
+    @inbounds for k=0:Na^3-1
+        for i=1:3
             dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
             dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
             dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
