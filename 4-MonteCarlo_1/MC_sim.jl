@@ -30,7 +30,51 @@ any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization and Δ seclection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5, anim=false)
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
+
+    Y = zeros(3N)   # array of proposals
+    j = zeros(Int64, maxsteps)  # array di frazioni accettate
+    U = zeros(Int(maxsteps/fstep)) # array of total energy
+    P2 = zeros(U)   # virial pressure
+
+    L = cbrt(N/rho)
+    X, a = initializeSystem(N, L)   # creates FCC crystal
+    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    @show D/a; println()
+
+    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
+    @inbounds for n = 1:maxsteps
+        P2[i] = vpressure(X,L)
+        U[i] = energy(X,L)
+        Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
+        shiftSystem!(Y,L)
+        ap = exp((U[i] - energy(Y,L))/T)   # P[Y]/P[X]
+        η = rand(3N)
+        for i = 1:length(X)
+            if η[i] < ap
+                X[i] = Y[i]
+                j[n] += 1
+            end
+        end
+        next!(prog)
+    end
+    H = U.+3N*T/2
+    P = P2.+rho*T
+
+    C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
+    @show τ = sum(C_H)
+    @show CV = cv(H,T,τ)
+    @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+
+    prettyPrint(T, rho, H, P, CV, τ)
+    anim && makeVideo(XX, T=T, rho=rho, D=D)
+
+    return nothing, H, P, j./(3N), C_H, CV, CVignorante
+end
+
+# faster(?) version with thermodinamic parameters computed every fstep steps
+function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -46,7 +90,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
-        if (n-1)%fstep == 0 #forse da eliminare
+        if (n-1)%fstep == 0
             i = cld(n,fstep)
             P2[i] = vpressure(X,L)
             U[i] = energy(X,L)
@@ -69,20 +113,15 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
 
     C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
     @show τ = sum(C_H)
-    @show CV = cv(H,T,τ)
-
-    # se energia è calcolata solo ogni tot passi, modalità "very fast varianza"
-    if fstep == 1
-        @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
-    else
-        @show CVignorante = variance(H)/T^2 + 1.5T
-    end
+    @show CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
+    @show CVignorante = variance(H)/T^2 + 1.5T
 
     prettyPrint(T, rho, H, P, CV, τ)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return nothing, H, P, j./(3N), C_H, CV, CVignorante
 end
+
 
 ## WIP: doesn't really work yet
 # Multi-threaded implementation, without history of positions and progress bar
