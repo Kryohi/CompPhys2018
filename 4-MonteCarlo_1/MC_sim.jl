@@ -355,7 +355,7 @@ end
 ## Thermodinamic Properties
 ##
 
-function energy(r,L)
+function energy(r::Array{Float64,1},L::Float64)
     V = 0.0
     @inbounds for l=0:Int(length(r)/3)-1
         @simd for i=0:l-1
@@ -374,7 +374,7 @@ function energy(r,L)
     return V
 end
 
-@fastmath function vpressure(r,L)
+@fastmath function vpressure(r::Array{Float64,1},L::Float64)
     P = 0.0
     @inbounds for l=1:Int(length(r)/3)-1
         for i=0:l-1
@@ -400,7 +400,7 @@ variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
 cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
 
 
-@fastmath function orderParameter(XX, rho)
+@fastmath function orderParameter(XX, rho::Float64)
     N = Int(size(XX,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
