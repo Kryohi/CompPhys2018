@@ -33,6 +33,7 @@ end
 
     XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=400000, fstep=1, Df=(1/70)*N/108)
 
+    info("Run ", find(Tarray.==T)[1], "finished, with tau = , ", sum(C_H))
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
