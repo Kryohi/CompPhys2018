@@ -45,11 +45,11 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
-        P2[i] = vpressure(X,L)
-        U[i] = energy(X,L)
+        P2[n] = vpressure(X,L)
+        U[n] = energy(X,L)
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
-        ap = exp((U[i] - energy(Y,L))/T)   # P[Y]/P[X]
+        ap = exp((U[n] - energy(Y,L))/T)   # P[Y]/P[X]
         η = rand(3N)
         for i = 1:length(X)
             if η[i] < ap
