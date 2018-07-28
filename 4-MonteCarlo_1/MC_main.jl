@@ -13,7 +13,7 @@ import MC
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
 
-@time XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.22, rho=0.3, maxsteps=20*10^4, Df=1/70)
+@time EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=108, T=0.07, rho=0.3, maxsteps=2*10^5, Df=1/70)
 
 
 ##
@@ -30,14 +30,12 @@ end
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
 
-    XX, EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=40*10^4, Df=(1/70)*N/108)
+    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=40*10^4, Df=(1/70)*N/108)
 
     info("Run ", find(Tarray.==T)[1], "finished, with tau = , ", sum(C_H))
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
-    #op = Sim.orderParameter(XX, rho)
-    #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
     return P, dP, E, dE, CV, CV2
 end
 

@@ -69,7 +69,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return nothing, H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CVignorante
 end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
@@ -116,9 +116,11 @@ function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
     τ = sum(C_H)
     CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
     CVignorante = variance(H)/T^2 + 1.5T
+    #op = Sim.orderParameter(XX, rho)
+    #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
 
-    return nothing, H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CVignorante
 end
 
 
