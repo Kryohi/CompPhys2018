@@ -3,6 +3,7 @@ module MC
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
 # recuperare dati da fase di termalizzazione?
+# limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
@@ -30,12 +31,11 @@ any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization and Δ seclection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5, anim=false)
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = zeros(Int(maxsteps/fstep)) # array of total energy
+    U = zeros(Float64, maxsteps)    # array of total energy
     P2 = zeros(U)   # virial pressure
 
     L = cbrt(N/rho)
@@ -46,7 +46,54 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
-        if (n-1)%fstep == 0 #forse da eliminare
+        U[n] = energy(X,L)
+        P2[n] = vpressure(X,L)
+        Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
+        shiftSystem!(Y,L)
+        ap = exp((U[n] - energy(Y,L))/T)   # P[Y]/P[X]
+        η = rand(3N)
+        for i = 1:length(X)
+            if η[i] < ap
+                X[i] = Y[i]
+                j[n] += 1
+            end
+        end
+        next!(prog)
+    end
+    H = U.+3N*T/2
+    P = P2.+rho*T
+
+    C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
+    τ = sum(C_H)
+    CV = cv(H,T,τ)
+    CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
+    anim && makeVideo(XX, T=T, rho=rho, D=D)
+
+    return H, P, j./(3N), C_H, CV, CVignorante
+end
+
+# faster(?) version with thermodinamic parameters computed every fstep steps
+# obviously cannot use τ
+# May be utterly useless
+function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
+
+    info("using slim simulation with fstep = ", fstep)
+    Y = zeros(3N)   # array of proposals
+    j = zeros(Int64, maxsteps)  # array di frazioni accettate
+    #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
+    U = zeros(Int(maxsteps/fstep))  # array of total energy
+    P2 = zeros(U)   # virial pressure
+
+    L = cbrt(N/rho)
+    X, a = initializeSystem(N, L)   # creates FCC crystal
+    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    @show D/a; println()
+
+    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
+    @inbounds for n = 1:maxsteps
+        if (n-1)%fstep == 0
             i = cld(n,fstep)
             P2[i] = vpressure(X,L)
             U[i] = energy(X,L)
@@ -68,21 +115,16 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, fstep=1, maxsteps=10^5,
     P = P2.+rho*T
 
     C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
-    @show τ = sum(C_H)
-    @show CV = cv(H,T,τ)
+    τ = sum(C_H)
+    CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
+    CVignorante = variance(H)/T^2 + 1.5T
+    #op = Sim.orderParameter(XX, rho)
+    #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
+    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
 
-    # se energia è calcolata solo ogni tot passi, modalità "very fast varianza"
-    if fstep == 1
-        @show CVignorante = variance(H[1:200:end])/T^2 + 1.5T
-    else
-        @show CVignorante = variance(H)/T^2 + 1.5T
-    end
-
-    prettyPrint(T, rho, H, P, CV, τ)
-    anim && makeVideo(XX, T=T, rho=rho, D=D)
-
-    return nothing, H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CVignorante
 end
+
 
 ## WIP: doesn't really work yet
 # Multi-threaded implementation, without history of positions and progress bar
@@ -212,11 +254,12 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     D_chosen = D    # D da restituire, minimizza autocorrelazione
 
     @inbounds for n=1:maxsteps
+        U[n] = energy(X,L)
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
         # P[Y]/P[X]
-        ap = exp((energy(X,L) - energy(Y,L))/T)
+        ap = exp((U[n] - energy(Y,L))/T)
         η = rand(3N)
         for i = 1:3N
             if η[i] < ap
@@ -224,8 +267,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
                 j[n] += 1
             end
         end
-        U[n] = energy(X,L)
-        H = U.+3N*T/2
+        H[n] = U[n]+3N*T/2
         #push!(HH, H)
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D
@@ -315,7 +357,7 @@ end
 ## Thermodinamic Properties
 ##
 
-function energy(r,L)
+function energy(r::Array{Float64,1},L::Float64)
     V = 0.0
     @inbounds for l=0:Int(length(r)/3)-1
         @simd for i=0:l-1
@@ -327,14 +369,15 @@ function energy(r,L)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                V += LJ(sqrt(dr2))  # cambiare togliendo LJ
+                #V += LJ(sqrt(dr2))
+                V += 4*(dr2^-6 - dr2^-3)
             end
         end
     end
     return V
 end
 
-@fastmath function vpressure(r,L)
+@fastmath function vpressure(r::Array{Float64,1},L::Float64)
     P = 0.0
     @inbounds for l=1:Int(length(r)/3)-1
         for i=0:l-1
@@ -360,7 +403,7 @@ variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
 cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
 
 
-function orderParameter(XX, rho)
+@fastmath function orderParameter(XX, rho::Float64)
     N = Int(size(XX,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
@@ -369,8 +412,8 @@ function orderParameter(XX, rho)
     dx = zeros(Na^3*3,size(r,2))
     dy = zeros(dx)
     dz = zeros(dx)
-    for k=0:Na^3-1
-        @inbounds for i=1:3
+    @inbounds for k=0:Na^3-1
+        for i=1:3
             dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
             dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
             dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
@@ -451,18 +494,22 @@ end
 ## Miscellaneous
 ##
 
-function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, cv::Float64, τ)
+function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, τ, cv, cv2)
     l = length(P)
     println("\nPressure: ", mean(P), " ± ", sqrt(abs(variance2(P,τ))))
     println("Mean energy: ", mean(E), " ± ", std(E))
     println("Specific heat: ", cv)
+    println("Specific heat (approximate) : ", cv2)
+    println("Average autocorrelation time: ", τ)
     println()
 end
-function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv::Float64)
+function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv, cv2)
     l = length(P)
     println("\nPressure: ", P, " ± ", 0.0)
     println("Mean energy: ", E, " ± ", 0.0)
     println("Specific heat: ", cv)
+    println("Specific heat (approximate) : ", cv2)
+    println("Average autocorrelation time: ", τ)
     println()
 end
 
