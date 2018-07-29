@@ -3,6 +3,7 @@ module MC
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
 # recuperare dati da fase di termalizzazione?
+# limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
