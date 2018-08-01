@@ -22,7 +22,8 @@ else
     using DataFrames, CSV, ProgressMeter, PyCall, Plots
     pyplot(size=(800, 600))
     fnt = "sans-serif"
-    default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14), legendfont=Plots.font(fnt,14))
+    default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
+     legendfont=Plots.font(fnt,14))
 end
 
 # add missing directories in current folder
@@ -30,7 +31,8 @@ any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
-# Main function, it creates the initial system, runs a (long) burn-in for thermalization and Δ seclection and then runs a Monte Carlo simulation for maxsteps
+# Main function, it creates the initial system, runs a (long) burn-in for thermalization
+# and Δ selection and then runs a Monte Carlo simulation for maxsteps
 function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
@@ -212,6 +214,7 @@ end
 function metropolis_GPU(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
 end
 
+
 ## -------------------------------------
 ## Initialization
 ##
@@ -310,7 +313,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
         end
     end
 
-    boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false, reuse=false)
+    boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false)
     plot!(boh, DD.*30)
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./200)
     gui()
@@ -438,10 +441,12 @@ function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
     Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
-        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false)
+        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
+         xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false)
     else
         L = cbrt(N/rho)
-        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
+         xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
     end
     gui()
 end
@@ -458,7 +463,8 @@ end
 #     prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
 #
 #     anim = @animate for i =1:size(M,2)
-#         Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+#         Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7,
+# xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
 #         if showCM   # add center of mass indicator
 #             cm = avg3D(M[:,i])
 #             scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
@@ -480,7 +486,8 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     #pick the particles near the plane x=a/4
     I = find(abs.(X -a/4) .< a/4)
     # now the X indices of M in the choosen plane are 3I-2
-    scatter(M[3I-1,1], M[3I,1], m=(7,0.7,:red,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), leg=false)
+    scatter(M[3I-1,1], M[3I,1], m=(7,0.7,:red,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)),
+     yaxis=("y",(-L/2,L/2)), leg=false)
     for i =2:size(M,2)
         scatter!(M[3I-1,i], M[3I,i], m=(7,0.05,:blue,Plots.stroke(0)), markeralpha=0.05)
     end
