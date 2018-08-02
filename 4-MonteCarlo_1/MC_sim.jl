@@ -298,7 +298,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.6
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.65
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 if n>wnd*2 && τ[n÷wnd]>0 &&
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
@@ -357,7 +357,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
         #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
         C_H[k] = (C_H_temp[k])/(C_H_temp[1])
     end
-    return C_
+    return C_H
     #@show return τ = sum(C_H)
 end
 
