@@ -30,9 +30,9 @@ end
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=60*10^4, Df=(1/70)*N/108)
+    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=60*10^4, Df=(1/69)*N/108)
 
-    info("Run ", find(Tarray.==T)[1], "finished, with tau = ", sum(C_H))
+    info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
@@ -40,7 +40,7 @@ end
 end
 
 T = [0.05:0.01:0.4; 0.42:0.02:1.24] # set per lavoro tutta notte
-#T = 0.2:0.1:1.4
+T = 0.58:0.04:1.2
 N = 108
 ρ = 0.3
 V = N./ρ
@@ -55,7 +55,7 @@ CV = [ x[5] for x in result ]
 CVignorante = [ x[6] for x in result ]
 
 data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante)
-file = string("./Data/MC_",N,"_rho",ρ,".csv")
+file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
 
 P1 = plot(T,CVignorante, reuse = false)

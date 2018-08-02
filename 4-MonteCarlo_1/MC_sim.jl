@@ -43,7 +43,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, 140000)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -241,7 +241,7 @@ end
 
 # al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
 # DA RISCRIVERE USANDO 2 LOOP
-function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
+function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 10
     k_max = 750  # distanza per autocorrelazione
@@ -254,7 +254,8 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
     C_H_tot = []
     τ = ones(maxsteps÷wnd).*1e6
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
-    D_chosen = D    # D da restituire, minimizza autocorrelazione
+    D_chosen = D0    # D da restituire, minimizza autocorrelazione
+    D = D0
 
     @inbounds for n=1:maxsteps
         U[n] = energy(X,L)
@@ -275,7 +276,7 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D
         if n%wnd == 0
-            DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per garfico stupido
+            DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
             meanH = mean(H[n-wnd+1:n])
             C_H_temp = zeros(k_max)
             C_H = ones(k_max)
@@ -296,14 +297,15 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd] > 0.2 && jm[n÷wnd] < 0.6
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.6
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                if n>wnd*2 && τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])) && τ[n÷wnd]>0
+                if n>wnd*2 && τ[n÷wnd]>0 &&
+                    (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
                 @show D = D*(1 + rand()/2 - 0.25)
 
-            elseif jm[n÷wnd] < 0.2
+            elseif jm[n÷wnd] < 0.25
                 @show D = D*0.7
                 τ[n÷wnd] = 1e6
             else
@@ -312,6 +314,8 @@ function burnin(X::Array{Float64}, D::Float64, T::Float64, L::Float64, a::Float6
             end
         end
     end
+
+    D_chosen == D && warn("No suitable Δ value was found, using default...")
 
     boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false)
     plot!(boh, DD.*30)
