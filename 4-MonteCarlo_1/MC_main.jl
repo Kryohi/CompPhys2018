@@ -30,7 +30,7 @@ end
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=60*10^4, Df=(1/69)*N/108)
+    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=70*10^4, Df=(1/70)*N/108)
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
     saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
@@ -40,7 +40,7 @@ end
 end
 
 T = [0.05:0.01:0.4; 0.42:0.02:1.24] # set per lavoro tutta notte
-T = 0.58:0.04:1.2
+T = 0.42:0.04:1.2
 N = 108
 ρ = 0.3
 V = N./ρ

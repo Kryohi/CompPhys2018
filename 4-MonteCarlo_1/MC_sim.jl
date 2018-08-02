@@ -43,7 +43,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, 140000)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, 150000)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -65,10 +65,10 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 2000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)
-    CVignorante = variance(H[1:200:end])/T^2 + 1.5T
+    CVignorante = variance(H[1:250:end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -235,7 +235,7 @@ function initializeSystem(N::Int, L)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    X += (rand(3N) - .5) .* (a/5)
+    X += (rand(3N) - .5) .* (a/50)
     return X, a
 end
 
@@ -243,8 +243,8 @@ end
 # DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
-    wnd = maxsteps ÷ 10
-    k_max = 750  # distanza per autocorrelazione
+    wnd = maxsteps ÷ 10 # larghezza finestra
+    k_max = 1200  # distanza per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
     jm = zeros(maxsteps÷wnd)
@@ -284,10 +284,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             # da sostituire con correlation() ?
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += H[i]*H[i+k-1]    # -meanH a entrambi?
+                    C_H_temp[k] += (H[i]-meanH)*(H[i+k-1]-meanH)    # -meanH a entrambi?
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
+                #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
+                C_H[k] = (C_H_temp[k])/(C_H_temp[1])
             end
             C_H_tot = [C_H_tot; C_H]
 
@@ -319,7 +320,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false)
     plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./200)
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./500)
     gui()
     @show D, D_chosen
 
@@ -350,12 +351,13 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
 
     for k = 1:k_max
         for i = 1:length(H)-k_max-1
-            C_H_temp[k] += H[i]*H[i+k-1]
+            C_H_temp[k] += (H[i]-meanH)*(H[i+k-1]-meanH)
         end
         C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
-        C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+        #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
+        C_H[k] = (C_H_temp[k])/(C_H_temp[1])
     end
-    return C_H
+    return C_
     #@show return τ = sum(C_H)
 end
 
