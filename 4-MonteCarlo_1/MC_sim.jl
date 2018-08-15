@@ -355,7 +355,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
     bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation:", barglyphs=BarGlyphs("[=> ]"), barlen=42)
     @inbounds for k = 1:k_max
         for i = 1:length(H)-k_max-1
-            ck += (H[i]-meanH) * (H[i+k-1]-meanH)
+            C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
         end
         C_H_temp[k] = ck / (length(H)-k_max)
         #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
