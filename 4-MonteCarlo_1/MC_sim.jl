@@ -300,9 +300,9 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                # the first condition excludes the τ values found in the first 3 windows,
+                # the first condition excludes the τ values found in the first 4 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd]>0 &&
+                if n>wnd*4 && τ[n÷wnd]>0 &&
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
@@ -357,7 +357,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
         for i = 1:length(H)-k_max-1
             C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
         end
-        C_H_temp[k] = ck / (length(H)-k_max)
+        C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
         #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
         C_H[k] = C_H_temp[k] / C_H_temp[1]
     end
