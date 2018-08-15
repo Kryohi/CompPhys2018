@@ -65,10 +65,10 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 10000)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 25000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)
-    CVignorante = variance(H[1:250:end])/T^2 + 1.5T
+    CVignorante = variance(H[1:1000:end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -78,7 +78,7 @@ end
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
 # May be utterly useless
-function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=42*10^4, anim=false)
+function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=84*10^4, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
@@ -284,11 +284,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             # da sostituire con correlation() ?
             for k = 1:k_max
                 for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += (H[i]-meanH)*(H[i+k-1]-meanH)    # -meanH a entrambi?
+                    C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
                 end
                 C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
                 #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
-                C_H[k] = (C_H_temp[k])/(C_H_temp[1])
+                C_H[k] = C_H_temp[k] / C_H_temp[1]
             end
             C_H_tot = [C_H_tot; C_H]
 
@@ -345,20 +345,23 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
 end
 
+# Da velocizzare
 function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
 
     meanH = mean(H)
     C_H_temp = zeros(k_max)
     C_H = zeros(k_max)
 
-    for k = 1:k_max
+    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation:", barglyphs=BarGlyphs("[=> ]"), barlen=42)
+    @inbounds for k = 1:k_max
         for i = 1:length(H)-k_max-1
-            C_H_temp[k] += (H[i]-meanH)*(H[i+k-1]-meanH)
+            ck += (H[i]-meanH) * (H[i+k-1]-meanH)
         end
-        C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
+        C_H_temp[k] = ck / (length(H)-k_max)
         #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
-        C_H[k] = (C_H_temp[k])/(C_H_temp[1])
+        C_H[k] = C_H_temp[k] / C_H_temp[1]
     end
+    next!(bar)
     return C_H
     #@show return τ = sum(C_H)
 end
@@ -411,7 +414,7 @@ end
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
 variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
 
-cv(H::Array{Float64}, T::Float64, τ::Float64) = τ*variance(H)/T^2 + 1.5T
+cv(H::Array{Float64}, T::Float64, τ::Float64) = variance2(H,τ)/T^2 + 1.5T
 
 
 @fastmath function orderParameter(XX, rho::Float64)
