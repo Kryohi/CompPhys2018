@@ -243,8 +243,8 @@ end
 # DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
-    wnd = maxsteps ÷ 15 # larghezza finestra
-    k_max = 1500  # distanza per autocorrelazione
+    wnd = maxsteps ÷ 15 # larghezza finestra su cui fissare D e calcolare tau
+    k_max = wnd ÷ 10  # distanza massima per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
     jm = zeros(maxsteps÷wnd)
