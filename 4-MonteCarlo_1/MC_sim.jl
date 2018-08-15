@@ -33,7 +33,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
+function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=4*10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -43,7 +43,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, 150000)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -65,7 +65,7 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=fal
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 2000)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 2500)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)
     CVignorante = variance(H[1:250:end])/T^2 + 1.5T
@@ -243,8 +243,8 @@ end
 # DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
-    wnd = maxsteps ÷ 10 # larghezza finestra
-    k_max = 1200  # distanza per autocorrelazione
+    wnd = maxsteps ÷ 15 # larghezza finestra
+    k_max = 1500  # distanza per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
     jm = zeros(maxsteps÷wnd)
@@ -298,9 +298,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.65
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                if n>wnd*2 && τ[n÷wnd]>0 &&
+                # the first condition excludes the τ values found in the first 3 windows,
+                # since equilibrium has not been reached yet.
+                if n>wnd*3 && τ[n÷wnd]>0 &&
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
