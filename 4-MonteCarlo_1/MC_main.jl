@@ -12,10 +12,10 @@ import MC
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
-# Df is the initial Δ step value and should be chosen quite carefully,
+# Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
-# some good values are 1/60 for 32 particles and 1/70 for 128, but it also depends on T and ρ
-@time EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=10*10^5, Df=1/60)
+# some good values are 1/50 for 32 particles and 1/70 for 128, but it also depends on T and ρ
+@time EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=4*10^6, Df=1/50)
 
 
 ##

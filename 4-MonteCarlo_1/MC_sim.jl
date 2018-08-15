@@ -33,7 +33,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=4*10^5, anim=false)
+function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=42*10^4, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -65,12 +65,12 @@ function metropolis_ST(; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 2500)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 10000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)
     CVignorante = variance(H[1:250:end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
-    anim && makeVideo(XX, T=T, rho=rho, D=D)
+    ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return H, P, j./(3N), C_H, CV, CVignorante
 end
@@ -78,7 +78,7 @@ end
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
 # May be utterly useless
-function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, anim=false)
+function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=42*10^4, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
@@ -90,7 +90,7 @@ function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, 120000)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -116,7 +116,7 @@ function metropolis_ST(fstep::Int; N=256, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 1000)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 10000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
     CVignorante = variance(H)/T^2 + 1.5T
@@ -235,7 +235,7 @@ function initializeSystem(N::Int, L)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    X += (rand(3N) - .5) .* (a/50)
+    X += (rand(3N) - .5) .* (a/42)
     return X, a
 end
 
