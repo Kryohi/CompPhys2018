@@ -33,7 +33,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=42*10^4, anim=false)
+function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=84*10^4, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -65,7 +65,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 25000)   # quando funzionerà sostituire il return con tau
+    C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,τ)
     CVignorante = variance(H[1:1000:end])/T^2 + 1.5T
@@ -320,7 +320,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
-    boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false)
+    boh = plot(C_H_tot, yaxis=("P",(-1.0,2.7)), linewidth=1.5, leg=false)
     plot!(boh, DD.*30)
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./500)
     gui()
@@ -352,18 +352,16 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
     C_H_temp = zeros(k_max)
     C_H = zeros(k_max)
 
-    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation:", barglyphs=BarGlyphs("[=> ]"), barlen=42)
+    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=36)
     @inbounds for k = 1:k_max
-        for i = 1:length(H)-k_max-1
+        @fastmath for i = 1:length(H)-k_max-1
             C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
         end
         C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
-        #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
         C_H[k] = C_H_temp[k] / C_H_temp[1]
+        next!(bar)
     end
-    next!(bar)
     return C_H
-    #@show return τ = sum(C_H)
 end
 
 
