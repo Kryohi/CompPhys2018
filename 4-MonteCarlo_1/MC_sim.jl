@@ -322,11 +322,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     boh = plot(C_H_tot, yaxis=("P",(-1.0,2.7)), linewidth=1.5, leg=false)
     plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./500)
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000)
+    plot!(H./H[1])
     gui()
     @show D, D_chosen
 
-    plot!(H./H[1])
     return X, D_chosen
 end
 
@@ -352,7 +352,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
     C_H_temp = zeros(k_max)
     C_H = zeros(k_max)
 
-    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=36)
+    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
     @inbounds for k = 1:k_max
         @fastmath for i = 1:length(H)-k_max-1
             C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
