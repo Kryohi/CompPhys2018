@@ -67,8 +67,8 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
 
     C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
-    CV = cv(H,T,τ)
-    CVignorante = variance(H[1:1000:end])/T^2 + 1.5T
+    CV = cv(H,T,C_H)
+    CVignorante = variance(H[1:round(τ/5):end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -410,9 +410,10 @@ end
 
 
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
-variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
+variance2(A::Array{Float64}, ch) =
+(mean(A.*A) - mean(A)^2)*(1-sum((1.-(1:length(ch))./length(ch)).*ch)*2/length(A))
 
-cv(H::Array{Float64}, T::Float64, τ::Float64) = variance2(H,τ)/T^2 + 1.5T
+cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
 
 
 @fastmath function orderParameter(XX, rho::Float64)

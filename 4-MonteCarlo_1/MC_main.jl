@@ -45,7 +45,7 @@ end
 T = [0.08:0.01:0.5; 0.52:0.02:1.24] # set per lavoro tutta notte
 #T = 0.04:0.04:1.2
 N = 32
-ρ = 0.3
+ρ = 0.28
 V = N./ρ
 
 # map the parallelPV function to the ρ array
