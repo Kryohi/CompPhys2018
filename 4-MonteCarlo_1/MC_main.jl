@@ -32,17 +32,18 @@ end
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=6*10^6, Df=(1/45))
+    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=8*10^6, Df=(1/45))
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
     #saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
-    return P, dP, E, dE, CV, CV2
+    τ = sum(C_H)
+    return P, dP, E, dE, CV, CV2, τ
 end
 
-T = [0.05:0.01:0.4; 0.42:0.02:1.24] # set per lavoro tutta notte
-T = 0.04:0.04:1.2
+T = [0.08:0.01:0.5; 0.52:0.02:1.24] # set per lavoro tutta notte
+#T = 0.04:0.04:1.2
 N = 32
 ρ = 0.3
 V = N./ρ
@@ -53,10 +54,10 @@ V = N./ρ
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
-CV = [ x[5] for x in result ]
-CVignorante = [ x[6] for x in result ]
+CV, CVignorante = [ x[5] for x in result ], [ x[6] for x in result ]
+τ = [ x[7] for x in result ]
 
-data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante)
+data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante, tau=τ)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
 
