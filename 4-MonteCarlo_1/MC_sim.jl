@@ -483,15 +483,6 @@ function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv
     println("Average autocorrelation time: ", τ)
     println()
 end
-function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv, cv2)
-    l = length(P)
-    println("\nPressure: ", P, " ± ", 0.0)
-    println("Mean energy: ", E, " ± ", 0.0)
-    println("Specific heat: ", cv)
-    println("Specific heat (approximate) : ", cv2)
-    println("Average autocorrelation time: ", τ)
-    println()
-end
 
 function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     data = DataFrame(E=EE, P=PP, CVcorr=CV, CV=CV2, Ch=[C_H; missings(length(EE)-length(C_H))])
