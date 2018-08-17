@@ -17,7 +17,7 @@ module MC
 # grafici
 # profit
 
-
+(VERSION >= v"0.7-") && (using Statistics)
 using DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
@@ -38,7 +38,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     U = zeros(Float64, maxsteps)    # array of total energy
     fstep = 200
     P2 = zeros(Int(maxsteps/fstep))   # virial pressure
-    OP = zeros(P2)  # order parameter
+    OP = zeros(Int(maxsteps/fstep))  # order parameter
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
@@ -70,7 +70,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = acf(H, 30000)   # quando funzionerà sostituire il return con tau
+    C_H = acf(H, 33000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -137,7 +137,7 @@ function initializeSystem(N::Int, L)
     a = L / Na  # passo reticolare
     !isapprox(Na, cbrt(N/4)) && error("Can't make a cubic FCC crystal with this N :(")
 
-    X = Array{Float64}(3N)
+    X = zeros(Float64, 3N)
     for i=0:Na-1, j=0:Na-1, k = 0:Na-1  # loop over every cell of the cfc lattice
         n = i*Na*Na + j*Na + k # unique number for each triplet i,j,k
         X[n*12+1], X[n*12+2], X[n*12+3] = a*i, a*j, a*k # vertice celle [x1,y1,z1,...]
@@ -145,7 +145,7 @@ function initializeSystem(N::Int, L)
         X[n*12+7], X[n*12+8], X[n*12+9] = a*i + a/2, a*j, a*k + a/2
         X[n*12+10], X[n*12+11], X[n*12+12] = a*i, a*j + a/2, a*k + a/2
     end
-    X += a/4   # needed to avoid particles exactly at the edges of the box
+    X .+= a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
     return X, a
 end
@@ -154,7 +154,7 @@ end
 # DA RISCRIVERE USANDO 2 LOOP
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
-    wnd = maxsteps ÷ 15 # larghezza finestra su cui fissare D e calcolare tau
+    wnd = maxsteps ÷ 12 # larghezza finestra su cui fissare D e calcolare tau
     k_max = wnd ÷ 10  # distanza massima per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
@@ -200,7 +200,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D in base ad acceptance ratio e τ
         if n%wnd == 0
-            DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
+            DD[Int(n÷wnd*k_max-k_max+1):Int(n÷wnd*k_max)] .= D # per grafico stupido
 
             C_H = acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
             C_H_tot = [C_H_tot; C_H]
@@ -249,7 +249,7 @@ end
 ## Evolution
 ##
 
-HO(x::Float64,ω::Float64) = ω^2*x^2 /2
+HO(x::Float64,ω::Float64) = ω^2*x^2 /2  # not used
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 
@@ -260,16 +260,16 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
 end
 
 # Da velocizzare
-function acf(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
+function acf(H::Array{Float64,1}, k_max::Int64)
 
     meanH = mean(H)
     C_H = zeros(k_max)
-
     CH1 = 0.0
     @inbounds for i = 1:length(H)-k_max-1
         CH1 += (H[i]-meanH) * (H[i]-meanH)
     end
     CH1 = CH1 / (length(H)-k_max)
+    C_H[1] = 1.0
 
     bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
     @inbounds for k = 2:k_max
@@ -341,12 +341,12 @@ cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.
     Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
     dx = zeros(Na^3*3)
-    dy = zeros(dx)
-    dz = zeros(dx)
+    dy = zeros(Na^3*3)
+    dz = zeros(Na^3*3)
     r0, = initializeSystem(N,L)
     dx0 = zeros(Na^3*3)
-    dy0 = zeros(dx)
-    dz0 = zeros(dx)
+    dy0 = zeros(Na^3*3)
+    dz0 = zeros(Na^3*3)
 
     @inbounds for k=0:Na^3-1
         for i=1:3
