@@ -29,10 +29,10 @@ import MC
     EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/45))
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
-    E, dE = mean(EE), std(EE)
+    E, dE = mean(EE), std(EE)   # usare variance2?
     P, dP = mean(PP), std(PP)
     τ = sum(C_H)
-    
+
     return P, dP, E, dE, CV, CV2, τ
 end
 
@@ -55,11 +55,11 @@ data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante, tau=τ)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
 
-P1 = plot(T, CVignorante, reuse = false)
+P1 = plot(T, CVignorante, label="CV2", reuse = false)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
-P2 = plot(T, CV, reuse = false)
+P2 = plot(T, CV, label="CV", reuse = false)
 gui()
 file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P2,file)

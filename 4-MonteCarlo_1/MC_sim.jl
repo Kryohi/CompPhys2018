@@ -36,7 +36,9 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
     U = zeros(Float64, maxsteps)    # array of total energy
-    P2 = zeros(U)   # virial pressure
+    fstep = 200
+    P2 = zeros(Int(maxsteps/fstep))   # virial pressure
+    OP = zeros(P2)  # order parameter
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
@@ -46,8 +48,13 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
+        if (n-1)%fstep == 0
+            i = cld(n,fstep)
+            P2[i] = vpressure(X,L)
+            OP[i] = orderParameter(X,L)
+            #XX[:,i] = X
+        end
         U[n] = energy(X,L)
-        P2[n] = vpressure(X,L)
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
         ap = exp((U[n] - energy(Y,L))/T)   # P[Y]/P[X]
@@ -67,63 +74,11 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
-    prettyPrint(T, rho, H, P, C_H, CV, CV2)
-    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H)
+    prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
+    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return H, P, j./(3N), C_H, CV, CV2, X
-end
-
-# faster(?) version with thermodinamic parameters computed every fstep steps
-# obviously cannot use τ
-# May be utterly useless
-function metropolis_ST(fstep::Int; N=108, T=.5, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=12*10^5, anim=false)
-
-    info("using slim simulation with fstep = ", fstep)
-    Y = zeros(3N)   # array of proposals
-    j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = zeros(Int(maxsteps/fstep))  # array of total energy
-    P2 = zeros(U)   # virial pressure
-
-    L = cbrt(N/rho)
-    X, a = initializeSystem(N, L)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
-    @show D/a; println()
-
-    prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
-    @inbounds for n = 1:maxsteps
-        if (n-1)%fstep == 0
-            i = cld(n,fstep)
-            P2[i] = vpressure(X,L)
-            U[i] = energy(X,L)
-            #XX[:,i] = X
-        end
-        Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
-        shiftSystem!(Y,L)
-        ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-        η = rand(3N)
-        for i = 1:length(X)
-            if η[i] < ap
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
-        next!(prog)
-    end
-    H = U.+3N*T/2
-    P = P2.+rho*T
-
-    C_H = autocorrelation(H, 10000)   # quando funzionerà sostituire il return con tau
-    τ = sum(C_H)
-    CV = cv(H,T,τ)    # in questo caso inutile e sbagliato
-    CVignorante = variance(H)/T^2 + 1.5T
-    #op = Sim.orderParameter(XX, rho)
-    #Sim.make2DtemporalPlot(XX[:,1:1700], T=T0, rho=rho, save=true)
-    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
-
-    return H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CV2, OP
 end
 
 
@@ -380,30 +335,27 @@ variance2(A::Array{Float64}, ch) =
 cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
 
 
-@fastmath function orderParameter(XX, rho::Float64)
-    N = Int(size(XX,1)/3)
-    L = cbrt(N/rho)
+@fastmath function orderParameter(r::Array{Float64}, L::Float64)
+    N = Int(size(r,1)/3)
     Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
-    r = XX[:,size(XX,2)÷3:end]  # taglia parti non all'equilibrio
-    dx = zeros(Na^3*3,size(r,2))
+    dx = zeros(Na^3*3)
     dy = zeros(dx)
     dz = zeros(dx)
     @inbounds for k=0:Na^3-1
         for i=1:3
-            dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
-            dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
-            dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
-            dy[3k+i,:] .-= L.*round.(dy[3k+i,:]/L)
-            dz[3k+i,:] = r[12k+3,:] - r[12k+3i+3,:]
-            dz[3k+i,:] .-= L.*round.(dz[3k+i,:]/L)
+            dx[3k+i] = r[12k+1] - r[12k+3i+1]
+            dx[3k+i] -= L*round(dx[3k+i]/L)
+            dy[3k+i] = r[12k+2] - r[12k+3i+2]
+            dy[3k+i] -= L*round(dy[3k+i]/L)
+            dz[3k+i] = r[12k+3] - r[12k+3i+3]
+            dz[3k+i] -= L*round(dz[3k+i]/L)
         end
     end
     dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
     R = dr[:,1]
     K = 2π./R
     ordPar = mean((cos.(K.*dr)),2)
-    return mean(ordPar)
 end
 
 
@@ -475,17 +427,18 @@ end
 ## Miscellaneous
 ##
 
-function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2)
-    println("\nPressure: ", mean(P), " ± ", sqrt(variance2(P,ch)))
-    println("Mean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
+function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2, OP::Array)
+    println("\nMean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
+    println("Pressure: ", mean(P), " ± ", std(P))
     println("Specific heat: ", cv)
-    println("Specific heat (approximate) : ", cv2)
+    println("Specific heat (alternative) : ", cv2)
+    println("Order parameter : ", mean(OP), " ± ", std(OP))
     println("Average autocorrelation time: ", τ)
     println()
 end
 
-function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
-    data = DataFrame(E=EE, P=PP, CVcorr=CV, CV=CV2, Ch=[C_H; missings(length(EE)-length(C_H))])
+function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H, OP)
+    data = DataFrame(E=EE, P=PP, CV=CV, CV2=CV2, OP=OP, Ch=[C_H; missings(length(EE)-length(C_H))])
     file = string("./Data/MCtemp_",N,"_rho",rho,"_T",T,".csv")
     CSV.write(file, data)
     info("Data saved in ", file)
@@ -498,7 +451,7 @@ end
 
 
 # creates an array with length N of gaussian distributed numbers using Box-Muller
-function vecboxMuller(sigma, N::Int, x0=0.0)
+function vecboxMuller(sigma::Float64, N::Int, x0=0.0)
     #srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
