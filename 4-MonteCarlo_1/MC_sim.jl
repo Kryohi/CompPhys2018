@@ -84,7 +84,7 @@ end
 
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
-function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
+function metropolis_MP(; N=108, T=.7, rho=.2, Df=1/70, maxsteps=10^6)
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
@@ -169,7 +169,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D = D0
 
     # pre-thermalization
-    @inbounds for n = 1:10000
+    @inbounds for n = 1:50000
         V = energy(X,L)
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
@@ -183,12 +183,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         end
     end
 
+    # Δ selection + moar thermalization
     @inbounds for n=1:maxsteps
         U[n] = energy(X,L)
-        # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
         shiftSystem!(Y,L)
-        # P[Y]/P[X]
         ap = exp((U[n] - energy(Y,L))/T)
         η = rand(3N)
         for i = 1:3N
@@ -199,22 +198,24 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         end
         H[n] = U[n]+3N*T/2
 
-        # ogni wnd passi calcola autocorrelazione e aggiorna D
+        # ogni wnd passi calcola autocorrelazione e aggiorna D in base ad acceptance ratio e τ
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
 
             C_H = acf(H[n-wnd+1:n], k_max)
             C_H_tot = [C_H_tot; C_H]
-            @show τ[n÷wnd] = sum(C_H)
+            τ[n÷wnd] = sum(C_H)
+            τ[n÷wnd]<0 ? τ[n÷wnd]=42e5 : nothing
 
             # check sulla media di passi accettati nella finestra attuale
-            @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
+            jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
+            println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4)
+
             if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd]>0 &&
-                    (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
+                if n>wnd*3 && τ[n÷wnd] < minimum(τ[1:n÷wnd-1])
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -443,7 +444,7 @@ function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv
     println("Specific heat: ", cv)
     println("Specific heat (alternative) : ", cv2)
     println("Order parameter : ", mean(OP), " ± ", std(OP))
-    println("Average autocorrelation time: ", τ)
+    println("Average autocorrelation time: ", sum(ch))
     println()
 end
 
