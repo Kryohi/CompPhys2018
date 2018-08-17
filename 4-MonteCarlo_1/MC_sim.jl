@@ -2,12 +2,13 @@ module MC
 
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
+# aumentare raggio di autocorrelazione per scelta di D
 # recuperare dati da fase di termalizzazione?
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (Wiener–Khinchin?)
+# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin?)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -16,15 +17,12 @@ module MC
 # grafici
 # profit
 
-if VERSION >= v"0.7-"   # su julia master Plots non si compila ¯\_(ツ)_/¯
-    using Dates, ProgressMeter
-else
-    using DataFrames, CSV, ProgressMeter, PyCall, Plots
-    pyplot(size=(800, 600))
-    fnt = "sans-serif"
-    default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
-     legendfont=Plots.font(fnt,14))
-end
+
+using DataFrames, CSV, ProgressMeter, PyCall, Plots
+pyplot(size=(800, 600))
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
+legendfont=Plots.font(fnt,14))
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -33,7 +31,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=42*10^4, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -42,7 +40,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
@@ -65,20 +63,20 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 25000)   # quando funzionerà sostituire il return con tau
+    C_H = acf(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
-    CV = cv(H,T,τ)
-    CVignorante = variance(H[1:1000:end])/T^2 + 1.5T
-    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
+    CV = cv(H,T,C_H)
+    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, τ, CV, CV2)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CV2
 end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
 # May be utterly useless
-function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=84*10^4, anim=false)
+function metropolis_ST(fstep::Int; N=108, T=.5, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=12*10^5, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
@@ -128,45 +126,6 @@ function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
 end
 
 
-## WIP: doesn't really work yet
-# Multi-threaded implementation, without history of positions and progress bar
-function metropolis_MT(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
-
-    #Y = zeros(3N)   # array of proposals
-    j = SharedArray{Int64}(maxsteps)  # array di frazioni accettate
-    #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = SharedArray{Float64}(maxsteps) # array of total energy
-    P2 = SharedArray{Float64}(maxsteps)   # virial pressure
-
-    L = cbrt(N/rho)
-    X, a = initializeSystem(N, L, T)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
-
-    Threads.@threads for n = 1:maxsteps
-        Y = X .+ D.*(rand(3N).-0.5)    # Proposal
-        shiftSystem!(Y,L)
-        ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-        η = rand(3N)
-        for i = 1:length(X)
-            if η[i] < ap
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
-        U[n] = energy(X,L)
-        P2[n] = vpressure(X,L)
-    end
-
-    H = U.+3N*T/2
-    CV = cv(H,T)
-    prettyPrint(T, rho, H, P2.+rho*T, CV)
-
-    return H, P2.+rho*T, CV, jbi, j./(3N)
-end
-
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
 function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
@@ -209,9 +168,6 @@ function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
     CV = 0.0 #cv(H,T)
     prettyPrint(T, rho, H, P, CV)
     return H, P, CV, jbi, mean(j)/3N
-end
-
-function metropolis_GPU(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
 end
 
 
@@ -257,6 +213,22 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen = D0    # D da restituire, minimizza autocorrelazione
     D = D0
 
+    if N>10 # if using more particles, add some pre-thermalization
+        @inbounds for n = 1:10000
+            V = energy(X,L)
+            Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
+            shiftSystem!(Y,L)
+            ap = exp((V - energy(Y,L))/T)   # P[Y]/P[X]
+            η = rand(3N)
+            for i = 1:length(X)
+                if η[i] < ap
+                    X[i] = Y[i]
+                    j[n] += 1
+                end
+            end
+        end
+    end
+
     @inbounds for n=1:maxsteps
         U[n] = energy(X,L)
         # Proposta
@@ -272,41 +244,26 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             end
         end
         H[n] = U[n]+3N*T/2
-        #push!(HH, H)
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
-            meanH = mean(H[n-wnd+1:n])
-            C_H_temp = zeros(k_max)
-            C_H = ones(k_max)
 
-            # da sostituire con correlation() ?
-            for k = 1:k_max
-                for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
-                end
-                C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
-                C_H[k] = C_H_temp[k] / C_H_temp[1]
-            end
+            C_H = acf(H[n-wnd+1:n], k_max)
             C_H_tot = [C_H_tot; C_H]
-
-            # solo per controllare che cacchio sta succedendo
             @show τ[n÷wnd] = sum(C_H)
-            #@show CV = cv(H,T,τ[n÷wnd])
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                # the first condition excludes the τ values found in the first 4 windows,
+                # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*4 && τ[n÷wnd]>0 &&
+                if n>wnd*3 && τ[n÷wnd]>0 &&
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
-                @show D = D*(1 + rand()/2 - 0.25)
+                @show D = D_chosen*(1 + rand()/2 - 0.25)
 
             elseif jm[n÷wnd] < 0.25
                 @show D = D*0.7
@@ -320,13 +277,13 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
-    boh = plot(C_H_tot, yaxis=("P",(-1.5,2.5)), linewidth=1.5, leg=false)
-    plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./500)
+    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
+    plot!(boh, H[1:10:end]./H[1], label="E/E[1]", linewidth=0.5)
+    plot!(boh, DD.*30, label="Δ*30")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
     gui()
     @show D, D_chosen
 
-    plot!(H./H[1])
     return X, D_chosen
 end
 
@@ -346,24 +303,28 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
 end
 
 # Da velocizzare
-function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
+function acf(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
 
     meanH = mean(H)
-    C_H_temp = zeros(k_max)
     C_H = zeros(k_max)
 
-    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation:", barglyphs=BarGlyphs("[=> ]"), barlen=42)
-    @inbounds for k = 1:k_max
-        for i = 1:length(H)-k_max-1
-            C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
-        end
-        C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
-        #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2)
-        C_H[k] = C_H_temp[k] / C_H_temp[1]
+    CH1 = 0.0
+    @inbounds for i = 1:length(H)-k_max-1
+        CH1 += (H[i]-meanH) * (H[i]-meanH)
     end
-    next!(bar)
+    CH1 = CH1 / (length(H)-k_max)
+
+    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
+    @inbounds for k = 2:k_max
+        C_H_temp = 0.0
+        @fastmath for i = 1:length(H)-k_max-1
+            C_H_temp += (H[i]-meanH) * (H[i+k-1]-meanH)
+        end
+        C_H_temp = C_H_temp / (length(H)-k_max)
+        C_H[k] = C_H_temp / CH1
+        next!(bar)
+    end
     return C_H
-    #@show return τ = sum(C_H)
 end
 
 
@@ -412,9 +373,10 @@ end
 
 
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
-variance2(A::Array{Float64}, τ) = (mean(A.*A) - mean(A)^2)*τ/length(A)
+variance2(A::Array{Float64}, ch) =
+(mean(A.*A) - mean(A)^2)*(1-sum((1.-(1:length(ch))./length(ch)).*ch)*2/length(A))
 
-cv(H::Array{Float64}, T::Float64, τ::Float64) = variance2(H,τ)/T^2 + 1.5T
+cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
 
 
 @fastmath function orderParameter(XX, rho::Float64)
