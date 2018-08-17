@@ -202,12 +202,13 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
 
-            C_H = acf(H[n-wnd+1:n], k_max)
+            C_H = acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
             C_H_tot = [C_H_tot; C_H]
             τ[n÷wnd] = sum(C_H)
+            # if τ results negative, we put it to a high number to simplify the next conditionals
             τ[n÷wnd]<0 ? τ[n÷wnd]=42e5 : nothing
 
-            # check sulla media di passi accettati nella finestra attuale
+            # average acceptance ratio in current window
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4)
 
@@ -230,13 +231,13 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         end
     end
 
-    D_chosen == D && warn("No suitable Δ value was found, using default...")
+    D_chosen == D0 && warn("No suitable Δ value was found, using default...")
 
     boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
     plot!(boh, (H[1:10:end].-H[1])./50, label="E-E[1]", linewidth=0.5)
     plot!(boh, DD.*30, label="Δ*30")
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
-    hline!(boh, [D_chosen*30], label="final Δ")
+    hline!(boh, [D_chosen*30], label="final Δ (*30)")
     gui()
     @show D, D_chosen
 
