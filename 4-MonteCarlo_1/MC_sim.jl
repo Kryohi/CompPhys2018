@@ -147,7 +147,6 @@ function initializeSystem(N::Int, L)
     end
     X += a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
-    X += (rand(3N) - .5) .* (a/42)
     return X, a
 end
 
@@ -234,9 +233,10 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
     boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
-    plot!(boh, (H[1:10:end].-H[1])./10, label="E-E[1]", linewidth=0.5)
+    plot!(boh, (H[1:10:end].-H[1])./50, label="E-E[1]", linewidth=0.5)
     plot!(boh, DD.*30, label="Δ*30")
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
+    hline!(boh, [D_chosen*30], label="final Δ")
     gui()
     @show D, D_chosen
 
@@ -342,6 +342,11 @@ cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.
     dx = zeros(Na^3*3)
     dy = zeros(dx)
     dz = zeros(dx)
+    r0, = initializeSystem(N,L)
+    dx0 = zeros(Na^3*3)
+    dy0 = zeros(dx)
+    dz0 = zeros(dx)
+
     @inbounds for k=0:Na^3-1
         for i=1:3
             dx[3k+i] = r[12k+1] - r[12k+3i+1]
@@ -350,12 +355,18 @@ cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.
             dy[3k+i] -= L*round(dy[3k+i]/L)
             dz[3k+i] = r[12k+3] - r[12k+3i+3]
             dz[3k+i] -= L*round(dz[3k+i]/L)
+            dx0[3k+i] = r0[12k+1] - r0[12k+3i+1]
+            dx0[3k+i] -= L*round(dx0[3k+i]/L)
+            dy0[3k+i] = r0[12k+2] - r0[12k+3i+2]
+            dy0[3k+i] -= L*round(dy0[3k+i]/L)
+            dz0[3k+i] = r0[12k+3] - r0[12k+3i+3]
+            dz0[3k+i] -= L*round(dz0[3k+i]/L)
         end
     end
     dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
-    R = dr[:,1]
+    R = sqrt.(dx0.^2 + dy0.^2 + dz0.^2)
     K = 2π./R
-    ordPar = mean((cos.(K.*dr)),2)
+    ordPar = mean(cos.(K.*dr))
 end
 
 
