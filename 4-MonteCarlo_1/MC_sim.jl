@@ -278,9 +278,9 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
     boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
+    plot!(boh, H[1:10:end]./H[1], label="E/E[1]", linewidth=0.5)
     plot!(boh, DD.*30, label="Δ*30")
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
-    plot!(H[1:10:end]./H[1], label="E/E[1]")
     gui()
     @show D, D_chosen
 
