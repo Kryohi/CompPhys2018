@@ -66,7 +66,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
+    C_H = acf(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -247,17 +247,14 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             end
         end
         H[n] = U[n]+3N*T/2
-        #push!(HH, H)
 
         # ogni wnd passi calcola autocorrelazione e aggiorna D
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
-            meanH = mean(H[n-wnd+1:n])
-            #C_H_temp = zeros(k_max)
-            #C_H = ones(k_max)
-
-            C_H = autocorrelation(H[n-wnd+1:n], k_max)
-            # da sostituire con correlation() ?
+            # meanH = mean(H[n-wnd+1:n])
+            # C_H_temp = zeros(k_max)
+            # C_H = ones(k_max)
+            # #da sostituire con correlation() ?
             # for k = 1:k_max
             #     for i = n-wnd+1:n-k_max-1
             #         C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
@@ -265,12 +262,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             #     C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
             #     C_H[k] = C_H_temp[k] / C_H_temp[1]
             # end
-            C_H_tot = [C_H_tot; C_H]
-            plot(C_H)
 
-            # solo per controllare che cacchio sta succedendo
+            C_H = acf(H[n-wnd+1:n], k_max)
+            C_H_tot = [C_H_tot; C_H]
+
             @show τ[n÷wnd] = sum(C_H)
-            #@show CV = cv(H,T,τ[n÷wnd])
 
             # check sulla media di passi accettati nella finestra attuale
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
@@ -322,7 +318,7 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
 end
 
 # Da velocizzare
-function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
+function acf(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
 
     meanH = mean(H)
     C_H = zeros(k_max)
