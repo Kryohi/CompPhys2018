@@ -42,7 +42,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
     @show D/a; println()
 
@@ -68,7 +68,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,C_H)
-    CVignorante = variance(H[1:round(τ/5):end])/T^2 + 1.5T
+    CVignorante = variance(H[1:round(Int,τ/5):end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CVignorante)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -128,45 +128,6 @@ function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5
 end
 
 
-## WIP: doesn't really work yet
-# Multi-threaded implementation, without history of positions and progress bar
-function metropolis_MT(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
-
-    #Y = zeros(3N)   # array of proposals
-    j = SharedArray{Int64}(maxsteps)  # array di frazioni accettate
-    #XX = zeros(3N, Int(maxsteps/fstep)) # positions history
-    U = SharedArray{Float64}(maxsteps) # array of total energy
-    P2 = SharedArray{Float64}(maxsteps)   # virial pressure
-
-    L = cbrt(N/rho)
-    X, a = initializeSystem(N, L, T)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
-
-    Threads.@threads for n = 1:maxsteps
-        Y = X .+ D.*(rand(3N).-0.5)    # Proposal
-        shiftSystem!(Y,L)
-        ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-        η = rand(3N)
-        for i = 1:length(X)
-            if η[i] < ap
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
-        U[n] = energy(X,L)
-        P2[n] = vpressure(X,L)
-    end
-
-    H = U.+3N*T/2
-    CV = cv(H,T)
-    prettyPrint(T, rho, H, P2.+rho*T, CV)
-
-    return H, P2.+rho*T, CV, jbi, j./(3N)
-end
-
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
 function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
@@ -211,9 +172,6 @@ function metropolis_MP(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
     return H, P, CV, jbi, mean(j)/3N
 end
 
-function metropolis_GPU(; N=500, T=2.0, rho=0.5, Df=1/20, maxsteps=10^4)
-end
-
 
 ## -------------------------------------
 ## Initialization
@@ -256,6 +214,23 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     D_chosen = D0    # D da restituire, minimizza autocorrelazione
     D = D0
+
+    if N>32 # if using more particles, add some pre-thermalization
+        @inbounds for n = 1:10000
+            V = energy(X,L)
+            Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
+            shiftSystem!(Y,L)
+            ap = exp((V - energy(Y,L))/T)   # P[Y]/P[X]
+            η = rand(3N)
+            for i = 1:length(X)
+                if η[i] < ap
+                    X[i] = Y[i]
+                    j[n] += 1
+                end
+            end
+            next!(prog)
+        end
+    end
 
     @inbounds for n=1:maxsteps
         U[n] = energy(X,L)
@@ -306,7 +281,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
-                @show D = D*(1 + rand()/2 - 0.25)
+                @show D = D_chosen*(1 + rand()/2 - 0.25)
 
             elseif jm[n÷wnd] < 0.25
                 @show D = D*0.7
@@ -320,10 +295,10 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
-    boh = plot(C_H_tot, yaxis=("P",(-1.0,2.7)), linewidth=1.5, leg=false)
-    plot!(boh, DD.*30)
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000)
-    plot!(H./H[1])
+    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autoccorrelation")
+    plot!(boh, DD.*30, label="Δ*30")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
+    plot!(H[1:10:end]./H[1], label="E/E[1]")
     gui()
     @show D, D_chosen
 
