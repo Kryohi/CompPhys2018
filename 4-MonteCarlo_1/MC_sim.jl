@@ -248,21 +248,9 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         # ogni wnd passi calcola autocorrelazione e aggiorna D
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
-            # meanH = mean(H[n-wnd+1:n])
-            # C_H_temp = zeros(k_max)
-            # C_H = ones(k_max)
-            # #da sostituire con correlation() ?
-            # for k = 1:k_max
-            #     for i = n-wnd+1:n-k_max-1
-            #         C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
-            #     end
-            #     C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-            #     C_H[k] = C_H_temp[k] / C_H_temp[1]
-            # end
 
             C_H = acf(H[n-wnd+1:n], k_max)
             C_H_tot = [C_H_tot; C_H]
-
             @show τ[n÷wnd] = sum(C_H)
 
             # check sulla media di passi accettati nella finestra attuale

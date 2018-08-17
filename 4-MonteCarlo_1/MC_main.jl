@@ -38,7 +38,6 @@ end
     #saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
-    plot(C_H)
     τ = sum(C_H)
     return P, dP, E, dE, CV, CV2, τ
 end
