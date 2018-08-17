@@ -168,18 +168,17 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen = D0    # D da restituire, minimizza autocorrelazione
     D = D0
 
-    if N>10 # if using more particles, add some pre-thermalization
-        @inbounds for n = 1:10000
-            V = energy(X,L)
-            Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
-            shiftSystem!(Y,L)
-            ap = exp((V - energy(Y,L))/T)   # P[Y]/P[X]
-            η = rand(3N)
-            for i = 1:length(X)
-                if η[i] < ap
-                    X[i] = Y[i]
-                    j[n] += 1
-                end
+    # pre-thermalization
+    @inbounds for n = 1:10000
+        V = energy(X,L)
+        Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
+        shiftSystem!(Y,L)
+        ap = exp((V - energy(Y,L))/T)   # P[Y]/P[X]
+        η = rand(3N)
+        for i = 1:length(X)
+            if η[i] < ap
+                X[i] = Y[i]
+                j[n] += 1
             end
         end
     end
@@ -330,7 +329,7 @@ end
 
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
 variance2(A::Array{Float64}, ch) =
-(mean(A.*A) - mean(A)^2)*(1-sum((1.-(1:length(ch))./length(ch)).*ch)*2/length(A))
+(mean(A.*A) - mean(A)^2) * (1-sum((1 .- (1:length(ch))./length(ch)).*ch)*2/length(A))
 
 cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
 
@@ -365,7 +364,7 @@ cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.
     end
     dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
     R = sqrt.(dx0.^2 + dy0.^2 + dz0.^2)
-    K = 2π./R
+    K = 2π ./ R
     ordPar = mean(cos.(K.*dr))
 end
 
