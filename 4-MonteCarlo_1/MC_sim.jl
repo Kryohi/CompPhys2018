@@ -69,7 +69,7 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,C_H)
-    CV2 = variance(H[1:round(Int,τ/5):end])/T^2 + 1.5T
+    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, τ, CV, CV2)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
@@ -253,19 +253,20 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         if n%wnd == 0
             DD[(n÷wnd*k_max-k_max+1):n÷wnd*k_max] = D # per grafico stupido
             meanH = mean(H[n-wnd+1:n])
-            C_H_temp = zeros(k_max)
-            C_H = ones(k_max)
+            #C_H_temp = zeros(k_max)
+            #C_H = ones(k_max)
 
+            C_H = autocorrelation(H[n-wnd+1:n], k_max)
             # da sostituire con correlation() ?
-            for k = 1:k_max
-                for i = n-wnd+1:n-k_max-1
-                    C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
-                end
-                C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
-                #C_H[k] = (C_H_temp[k] - meanH^2)/(C_H_temp[1] - meanH^2) # andrà bene l'abs?
-                C_H[k] = C_H_temp[k] / C_H_temp[1]
-            end
+            # for k = 1:k_max
+            #     for i = n-wnd+1:n-k_max-1
+            #         C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
+            #     end
+            #     C_H_temp[k] = C_H_temp[k] / (wnd - k_max)
+            #     C_H[k] = C_H_temp[k] / C_H_temp[1]
+            # end
             C_H_tot = [C_H_tot; C_H]
+            plot(C_H)
 
             # solo per controllare che cacchio sta succedendo
             @show τ[n÷wnd] = sum(C_H)
@@ -330,6 +331,7 @@ function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when sar
     @inbounds for i = 1:length(H)-k_max-1
         CH1 += (H[i]-meanH) * (H[i]-meanH)
     end
+    CH1 = CH1 / (length(H)-k_max)
 
     bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
     @inbounds for k = 2:k_max
