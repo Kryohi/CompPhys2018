@@ -8,7 +8,7 @@ module MC
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (Wiener–Khinchin?)
+# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin?)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -17,15 +17,12 @@ module MC
 # grafici
 # profit
 
-if VERSION >= v"0.7-"   # su julia master Plots non si compila ¯\_(ツ)_/¯
-    using Dates, ProgressMeter
-else
-    using DataFrames, CSV, ProgressMeter, PyCall, Plots
-    pyplot(size=(800, 600))
-    fnt = "sans-serif"
-    default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
-     legendfont=Plots.font(fnt,14))
-end
+
+using DataFrames, CSV, ProgressMeter, PyCall, Plots
+pyplot(size=(800, 600))
+fnt = "sans-serif"
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
+legendfont=Plots.font(fnt,14))
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -34,7 +31,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -79,7 +76,7 @@ end
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
 # May be utterly useless
-function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=12*10^5, anim=false)
+function metropolis_ST(fstep::Int; N=108, T=.5, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=12*10^5, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
