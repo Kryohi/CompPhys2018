@@ -31,7 +31,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -67,10 +67,11 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
-    prettyPrint(T, rho, H, P, τ, CV, CV2)
+    prettyPrint(T, rho, H, P, C_H, CV, CV2)
+    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return H, P, j./(3N), C_H, CV, CV2
+    return H, P, j./(3N), C_H, CV, CV2, X
 end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
@@ -474,10 +475,9 @@ end
 ## Miscellaneous
 ##
 
-function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, τ, cv, cv2)
-    l = length(P)
-    println("\nPressure: ", mean(P), " ± ", sqrt(abs(variance2(P,τ))))
-    println("Mean energy: ", mean(E), " ± ", std(E))
+function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2)
+    println("\nPressure: ", mean(P), " ± ", sqrt(variance2(P,ch)))
+    println("Mean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
     println("Specific heat: ", cv)
     println("Specific heat (approximate) : ", cv2)
     println("Average autocorrelation time: ", τ)
@@ -491,6 +491,13 @@ function prettyPrint(T::Float64, rho::Float64, E::Float64, P::Float64, cv, cv2)
     println("Specific heat (approximate) : ", cv2)
     println("Average autocorrelation time: ", τ)
     println()
+end
+
+function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
+    data = DataFrame(E=EE, P=PP, CVcorr=CV, CV=CV2, Ch=[C_H; missings(length(EE)-length(C_H))])
+    file = string("./Data/MCtemp_",N,"_rho",rho,"_T",T,".csv")
+    CSV.write(file, data)
+    info("Data saved in ", file)
 end
 
 function avg3D(A::Array{Float64,1})

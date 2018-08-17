@@ -15,30 +15,24 @@ import MC
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
 # some good values are ~1/40 for 32 particles and ~1/70 for 128, but it also depends on T and ρ
-#@time EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=6*10^6, Df=1/42)
+#@time EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=6*10^6, Df=1/42)
 
 
 ##
 ## Simulazioni multiple
 ##
 
-@everywhere function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
-    data = DataFrame(E=EE, P=PP, CVcorr=CV, CV=CV2, Ch=[C_H; missings(length(EE)-length(C_H))])
-    file = string("./Data/MCtemp_",N,"_rho",rho,"_T",T,".csv")
-    CSV.write(file, data)
-    info("Data saved in ", file)
-end
 
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2 = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/45))
+    EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/45))
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
-    #saveCSV(rho, N, T, EE, PP, CV, CV2, C_H)
     E, dE = mean(EE), std(EE)
     P, dP = mean(PP), std(PP)
     τ = sum(C_H)
+    
     return P, dP, E, dE, CV, CV2, τ
 end
 
