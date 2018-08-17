@@ -2,6 +2,7 @@ module MC
 
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
+# aumentare raggio di autocorrelazione per scelta di D
 # recuperare dati da fase di termalizzazione?
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
@@ -33,7 +34,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=84*10^4, anim=false)
+function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -68,17 +69,17 @@ function metropolis_ST(; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^6, bmaxstep
     C_H = autocorrelation(H, 30000)   # quando funzionerà sostituire il return con tau
     τ = sum(C_H)
     CV = cv(H,T,C_H)
-    CVignorante = variance(H[1:round(Int,τ/5):end])/T^2 + 1.5T
-    prettyPrint(T, rho, H, P, τ, CV, CVignorante)
+    CV2 = variance(H[1:round(Int,τ/5):end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, τ, CV, CV2)
     ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
-    return H, P, j./(3N), C_H, CV, CVignorante
+    return H, P, j./(3N), C_H, CV, CV2
 end
 
 # faster(?) version with thermodinamic parameters computed every fstep steps
 # obviously cannot use τ
 # May be utterly useless
-function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=84*10^4, anim=false)
+function metropolis_ST(fstep::Int; N=108, T=2.0, rho=0.5, Df=1/70, maxsteps=10^5, bmaxsteps=12*10^5, anim=false)
 
     info("using slim simulation with fstep = ", fstep)
     Y = zeros(3N)   # array of proposals
@@ -215,7 +216,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen = D0    # D da restituire, minimizza autocorrelazione
     D = D0
 
-    if N>32 # if using more particles, add some pre-thermalization
+    if N>10 # if using more particles, add some pre-thermalization
         @inbounds for n = 1:10000
             V = energy(X,L)
             Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
@@ -228,7 +229,6 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                     j[n] += 1
                 end
             end
-            next!(prog)
         end
     end
 
@@ -275,9 +275,9 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             @show jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
                 # if acceptance rate is good, choose D to minimize autocorrelation
-                # the first condition excludes the τ values found in the first 4 windows,
+                # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*4 && τ[n÷wnd]>0 &&
+                if n>wnd*3 && τ[n÷wnd]>0 &&
                     (length(filter(x->x.>0, τ[1:n÷wnd-1]))==0 || τ[n÷wnd] < minimum(filter(x->x.>0, τ[1:n÷wnd-1])))
                     @show D_chosen = D
                 end
@@ -295,7 +295,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     D_chosen == D && warn("No suitable Δ value was found, using default...")
 
-    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autoccorrelation")
+    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
     plot!(boh, DD.*30, label="Δ*30")
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
     plot!(H[1:10:end]./H[1], label="E/E[1]")
@@ -324,16 +324,21 @@ end
 function autocorrelation(H::Array{Float64,1}, k_max::Int64) # return τ when saremo sicuri che funzioni
 
     meanH = mean(H)
-    C_H_temp = zeros(k_max)
     C_H = zeros(k_max)
 
+    CH1 = 0.0
+    @inbounds for i = 1:length(H)-k_max-1
+        CH1 += (H[i]-meanH) * (H[i]-meanH)
+    end
+
     bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
-    @inbounds for k = 1:k_max
+    @inbounds for k = 2:k_max
+        C_H_temp = 0.0
         @fastmath for i = 1:length(H)-k_max-1
-            C_H_temp[k] += (H[i]-meanH) * (H[i+k-1]-meanH)
+            C_H_temp += (H[i]-meanH) * (H[i+k-1]-meanH)
         end
-        C_H_temp[k] = C_H_temp[k] / (length(H)-k_max)
-        C_H[k] = C_H_temp[k] / C_H_temp[1]
+        C_H_temp = C_H_temp / (length(H)-k_max)
+        C_H[k] = C_H_temp / CH1
         next!(bar)
     end
     return C_H
