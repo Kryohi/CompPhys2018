@@ -22,24 +22,24 @@ import MC
 ## Simulazioni multiple
 ##
 
-
 @everywhere function parallelPV(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/45))
+    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/56))
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
     E, dE = mean(EE), std(EE)   # usare variance2?
     P, dP = mean(PP), std(PP)
     τ = sum(C_H)
+    OP, dOP = mean(OP), std(OP)
 
-    return P, dP, E, dE, CV, CV2, τ
+    return P, dP, E, dE, CV, CV2, τ, OP
 end
 
-T = [0.06:0.02:0.56; 0.6:0.04:1.12] # set per lavoro tutta notte
+T = [0.06:0.02:0.56; 0.6:0.04:1.22] # set per lavoro tutta notte
 #T = 0.06:0.02:1.16
 N = 32
-ρ = 0.28
+ρ = 0.15
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -50,8 +50,9 @@ P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 CV, CVignorante = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]
+OP = [ x[8] for x in result ]
 
-data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante, tau=τ)
+data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante, tau=τ, OP=OP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
 
