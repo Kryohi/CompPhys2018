@@ -36,10 +36,10 @@ import MC
     return P, dP, E, dE, CV, CV2, τ, OP
 end
 
-T = [0.06:0.02:0.56; 0.6:0.04:1.22] # set per lavoro tutta notte
+T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
 #T = 0.06:0.02:1.16
 N = 32
-ρ = 0.15
+ρ = 0.2
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -48,15 +48,15 @@ V = N./ρ
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
-CV, CVignorante = [ x[5] for x in result ], [ x[6] for x in result ]
+CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]
 OP = [ x[8] for x in result ]
 
-data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CVignorante, tau=τ, OP=OP)
+data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CV2, tau=τ, OP=OP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
 
-P1 = plot(T, CVignorante, label="CV2", reuse = false)
+P1 = plot(T, CV2, label="CV2", reuse = false)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
