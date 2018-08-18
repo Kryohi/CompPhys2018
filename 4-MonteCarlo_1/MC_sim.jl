@@ -437,6 +437,26 @@ end
 ## Miscellaneous
 ##
 
+function simpleReweight(T0::Float64, T1::Float64, O::Array{Float64}, E::Array{Float64})
+    return sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+end
+
+function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::Array{Float64})
+    O2 = zeros(length(TT))
+    i = 1
+    for T1 in TT
+        O2[i] = sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+        i += 1
+    end
+    return O2
+end
+
+function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
+    
+end
+
+
+
 function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2, OP::Array)
     println("\n")
     println("Mean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))

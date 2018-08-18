@@ -33,6 +33,9 @@ end
     τ = sum(C_H)
     OP, dOP = mean(OP), std(OP)
 
+    @show T2 = [T-0.01, T+0.01]
+    @time Er = MC.reweight(T, T2, EE, EE)
+
     return P, dP, E, dE, CV, CV2, τ, OP
 end
 
