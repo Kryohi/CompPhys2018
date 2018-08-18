@@ -31,7 +31,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, csv=false, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=18*10^5, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -44,7 +44,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     X, a = initializeSystem(N, L)   # creates FCC crystal
     D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
     X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
-    @show D/a; println()
+    @show a/D; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
@@ -236,7 +236,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     boh = plot(DD.*30, yaxis=("cose",(-1.0,2.7)), label="Δ*30")
     plot!(boh, (H[1:10:end].-H[1].-0.5)./33, label="E-E[1]", linewidth=0.5)
     plot!(C_H_tot, linewidth=1.5, label="autocorrelation")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2000")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1500, label="τ/1500")
     hline!(boh, [D_chosen*30], label="final Δ (*30)")
     gui()
     @show D, D_chosen
@@ -271,7 +271,10 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     CH1 = CH1 / (length(H)-k_max)
     C_H[1] = 1.0
 
-    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
+    if k_max>20000
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45))
+    end
+
     @inbounds for k = 2:k_max
         C_H_temp = 0.0
         @fastmath for i = 1:length(H)-k_max-1
@@ -279,7 +282,7 @@ function acf(H::Array{Float64,1}, k_max::Int64)
         end
         C_H_temp = C_H_temp / (length(H)-k_max)
         C_H[k] = C_H_temp / CH1
-        next!(bar)
+        (k_max>20000) && next!(bar)
     end
     return C_H
 end
