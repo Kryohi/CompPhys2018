@@ -7,8 +7,9 @@ module MC
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
+# sistemare/verificare parametro d'ordine
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin?)
+# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -150,8 +151,7 @@ function initializeSystem(N::Int, L)
     return X, a
 end
 
-# al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
-# DA RISCRIVERE USANDO 2 LOOP
+# bisognerebbe controllare meglio quando si è raggiunto l'eq termodinamico
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 12 # larghezza finestra su cui fissare D e calcolare tau
@@ -212,11 +212,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4)
 
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.69
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < minimum(τ[4:n÷wnd-1])
+                if n>wnd*3 && τ[n÷wnd] < minimum(τ[3:n÷wnd-1])
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -231,13 +231,16 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         end
     end
 
-    D_chosen == D0 && warn("No suitable Δ value was found, using default...")
+    if D_chosen == D0
+        warn("No suitable Δ value was found, using the latest found...")
+        D_chosen = D
+    end
 
     boh = plot(DD.*30, yaxis=("cose",(-1.0,2.7)), label="Δ*30")
     plot!(boh, (H[1:10:end].-H[1].-0.42)./33, label="E-E[1]", linewidth=0.5)
     plot!(C_H_tot, linewidth=1.5, label="acf")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2000")
-    hline!(boh, [D_chosen*30], label="final Δ*30")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2e3")
+    hline!(boh, [D_chosen*30], label="Δ*30")
     gui()
 
     return X, D_chosen
@@ -451,10 +454,50 @@ function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::A
     return O2
 end
 
+# fa un binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta
+# poi pesca da E il numero di pesi giusto da ogni bin
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
-    
-end
 
+    bins = linspace(minimum(E), maximum(E), length(E)/10000)
+    δE = bins[42] - bins[41];
+    ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
+    nbin = zeros(Int64, length(bins))
+
+    for i=1:length(E)
+        @inbounds for j=1:length(bins)
+            if E[i] <= bins[j]
+                ebin[i] = j
+                nbin[j] += 1
+                break
+            end
+        end
+    end
+    nbin_new = nbin .* exp.((1/T0-1/T1) .* (bins .+ δE/2)) ./ sum(exp.((1/T0-1/T1) .* (bins .+ δE/2)))
+    pesi = nbin_new ./ maximum(nbin_new)
+
+    num, den = 0.0, 0.0
+    for i=1:length(E)
+        num += pesi[ebin[i]]*E[i]*exp((1/T0-1/T1)*E[i])
+        den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])
+    end
+    @show E2mean = num/den  # energia media ripesata, da forzare
+    @show wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)    # media pesata di energia con pesi non scalati
+    @show oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # capire perché è sottostimata
+    @show scale_factor = E2mean/wrongmean
+    pesi = pesi.*scale_factor
+    @show sum(pesi.*(bins .+ δE/2)) / length(E)
+
+    plot(nbin, label="orig")
+    plot!(pesi)
+    gui()
+    # for i=1:length(E)
+    #     if pesi[ebin[i]] >= rand()      # probabilmente sbagliato
+    #         E2[i] = E[i]
+    #     end
+    # end
+
+    return E2mean
+end
 
 
 function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2, OP::Array)
