@@ -70,7 +70,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = acf(H, 35000)
+    @time C_H = acf(H, 35000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -259,35 +259,6 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     end
 end
 
-# Da velocizzare
-function acf(H::Array{Float64,1}, k_max::Int64)
-
-    Z = H .- mean(H)
-    C_H = zeros(k_max)
-    CH1 = 0.0
-
-    @inbounds for i = 1:length(H)-k_max-1
-        CH1 += Z[i] * Z[i]
-    end
-    CH1 = CH1 / (length(H)-k_max)
-    C_H[1] = 1.0
-
-    if k_max>20000
-        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45))
-    end
-
-    @fastmath for k = 2:k_max
-        C_H_temp = 0.0
-        for i = 1:length(H)-k_max-1
-            @inbounds C_H_temp += Z[i] * Z[i+k-1]
-        end
-        C_H_temp = C_H_temp / (length(H)-k_max)
-        C_H[k] = C_H_temp / CH1
-        (k_max>20000) && next!(bar)
-    end
-    return C_H
-end
-
 
 ## -------------------------------------
 ## Thermodinamic Properties
@@ -338,6 +309,30 @@ variance2(A::Array{Float64}, ch) =
 (mean(A.*A) - mean(A)^2) * (1-sum((1 .- (1:length(ch))./length(ch)).*ch)*2/length(A))
 
 cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
+
+
+# Da velocizzare
+function acf(H::Array{Float64,1}, k_max::Int64)
+
+    Z = H .- mean(H)
+    C_H = zeros(k_max)
+
+    if k_max>20000
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)
+    end
+
+    @fastmath for k = 1:k_max
+        C_H_temp = 0.0
+        for i = 1:length(H)-k_max-1
+            @inbounds C_H_temp += Z[i] * Z[i+k-1]
+        end
+        C_H[k] = C_H_temp
+        (k_max>20000) && next!(bar)
+    end
+    CH1 = C_H[1]/(length(H)-k_max)
+
+    return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
+end
 
 
 @fastmath function orderParameter(r::Array{Float64}, L::Float64)
