@@ -70,7 +70,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = acf(H, 33000)
+    C_H = acf(H, 35000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -262,11 +262,12 @@ end
 # Da velocizzare
 function acf(H::Array{Float64,1}, k_max::Int64)
 
-    meanH = mean(H)
+    Z = H .- mean(H)
     C_H = zeros(k_max)
     CH1 = 0.0
+
     @inbounds for i = 1:length(H)-k_max-1
-        CH1 += (H[i]-meanH) * (H[i]-meanH)
+        CH1 += Z[i] * Z[i]
     end
     CH1 = CH1 / (length(H)-k_max)
     C_H[1] = 1.0
@@ -275,10 +276,10 @@ function acf(H::Array{Float64,1}, k_max::Int64)
         bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45))
     end
 
-    @inbounds for k = 2:k_max
+    @fastmath for k = 2:k_max
         C_H_temp = 0.0
-        @fastmath for i = 1:length(H)-k_max-1
-            C_H_temp += (H[i]-meanH) * (H[i+k-1]-meanH)
+        for i = 1:length(H)-k_max-1
+            @inbounds C_H_temp += Z[i] * Z[i+k-1]
         end
         C_H_temp = C_H_temp / (length(H)-k_max)
         C_H[k] = C_H_temp / CH1
