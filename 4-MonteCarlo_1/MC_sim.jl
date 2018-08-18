@@ -216,7 +216,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < minimum(τ[1:n÷wnd-1])
+                if n>wnd*3 && τ[n÷wnd] < minimum(τ[4:n÷wnd-1])
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -234,12 +234,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     D_chosen == D0 && warn("No suitable Δ value was found, using default...")
 
     boh = plot(DD.*30, yaxis=("cose",(-1.0,2.7)), label="Δ*30")
-    plot!(boh, (H[1:10:end].-H[1].-0.5)./33, label="E-E[1]", linewidth=0.5)
-    plot!(C_H_tot, linewidth=1.5, label="autocorrelation")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1500, label="τ/1500")
-    hline!(boh, [D_chosen*30], label="final Δ (*30)")
+    plot!(boh, (H[1:10:end].-H[1].-0.42)./33, label="E-E[1]", linewidth=0.5)
+    plot!(C_H_tot, linewidth=1.5, label="acf")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2000")
+    hline!(boh, [D_chosen*30], label="final Δ*30")
     gui()
-    @show D, D_chosen
 
     return X, D_chosen
 end
