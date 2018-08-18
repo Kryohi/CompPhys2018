@@ -17,7 +17,7 @@ module MC
 # grafici
 # profit
 
-(VERSION >= v"0.7-") && (using Statistics)
+(VERSION >= v"0.7-") && (using Statistics; using Distributed)
 using DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
@@ -233,10 +233,10 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
     D_chosen == D0 && warn("No suitable Δ value was found, using default...")
 
-    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
+    boh = plot(DD.*30, yaxis=("cose",(-1.0,2.7)), label="Δ*30")
     plot!(boh, (H[1:10:end].-H[1].-0.5)./33, label="E-E[1]", linewidth=0.5)
-    plot!(boh, DD.*30, label="Δ*30")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
+    plot!(C_H_tot, linewidth=1.5, label="autocorrelation")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2000")
     hline!(boh, [D_chosen*30], label="final Δ (*30)")
     gui()
     @show D, D_chosen
@@ -440,7 +440,8 @@ end
 ##
 
 function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2, OP::Array)
-    println("\nMean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
+    println("\n")
+    println("Mean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
     println("Pressure: ", mean(P), " ± ", std(P))
     println("Specific heat: ", cv)
     println("Specific heat (alternative) : ", cv2)
