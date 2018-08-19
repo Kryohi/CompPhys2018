@@ -22,7 +22,7 @@ end
 ## Simulazioni multiple
 ##
 
-@everywhere function parallelPV(rho, N, T, Tarray)
+@everywhere function parallelMC(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
     EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/76))
@@ -47,21 +47,21 @@ end
         CV2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
         CV[2] = MC.cv(EEr1, T2[1], C_H1)
         CV2[2] = MC.variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
-        reweight_data = DataFrame(T=T2, E=Er, P=Pr, CV=CV, CV2=CV2)
+        @show reweight_data = [T2; Er; Pr; CV; CV2]
     else
-        reweight_data = DataFrame() # dataframe vuoto :(
+        reweight_data = []
     end
     return P, dP, E, dE, CV, CV2, τ, OP, reweight_data
 end
 
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
-#T = 0.06:0.02:1.16
-N = 108
-ρ = 0.2
+T = 0.16:0.04:0.52
+N = 32
+ρ = 0.18
 V = N./ρ
 
 # map the parallelPV function to the ρ array
-@time result = pmap(T0 -> parallelPV(ρ, N, T0, T), T)
+@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
 
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
@@ -70,6 +70,7 @@ CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
 reweight_data = [ x[9] for x in result ]
+
 
 data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CV2, tau=τ, OP=OP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")

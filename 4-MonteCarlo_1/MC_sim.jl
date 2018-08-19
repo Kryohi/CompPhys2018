@@ -455,7 +455,7 @@ function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::A
 end
 
 # fa un binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta
-# poi pesca da E il numero di pesi giusto da ogni bin
+# poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere il numero pesi)
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
     bins = linspace(minimum(E), maximum(E), length(E)/10000)
