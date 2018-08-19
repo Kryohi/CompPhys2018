@@ -77,7 +77,6 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
     csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
-    ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return H, P, j./(3N), C_H, CV, CV2, OP
 end
@@ -240,7 +239,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     plot!(boh, (H[1:10:end].-H[1].-0.42)./33, label="E-E[1]", linewidth=0.5)
     plot!(C_H_tot, linewidth=1.5, label="acf")
     plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2e3")
-    hline!(boh, [D_chosen*30], label="Δ*30")
+    hline!(boh, [D_chosen*30], label="Δfin")
     gui()
 
     return X, D_chosen
@@ -334,6 +333,15 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     CH1 = C_H[1]/(length(H)-k_max)
 
     return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
+end
+
+function fft_acf(H::Array{Float64,1}, k_max::Int64)
+
+    Z = H .- mean(H)
+    C_H = zeros(k_max)
+
+
+    return C_H
 end
 
 
@@ -441,17 +449,27 @@ end
 ##
 
 function simpleReweight(T0::Float64, T1::Float64, O::Array{Float64}, E::Array{Float64})
-    return sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+    if length(O) == length(E)
+        return sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+    else
+        warn("Dimension mismatch between O and E, returning 0...")
+        return 0.0
+    end
 end
 
 function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::Array{Float64})
-    O2 = zeros(length(TT))
-    i = 1
-    for T1 in TT
-        O2[i] = sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
-        i += 1
+    if length(O[:,1]) == length(E[:,1])
+        O2 = zeros(length(TT))
+        i = 1
+        for T1 in TT
+            O2[i] = sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+            i += 1
+        end
+        return O2
+    else
+        warn("Dimension mismatch between O and E, returning 0...")
+        return zeros(length(TT))
     end
-    return O2
 end
 
 # fa un binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta

@@ -34,10 +34,10 @@ end
     OP, dOP = mean(OP), std(OP)
 
     # Reweighting
+    T2 = [T-0.01; T+0.01]
     @time if T>0.18 && T<0.5
-        @show T2 = [T-0.01, T+0.01]
-        info("Reweighting distribution at ", T2[1], " and ", T2[2])
-        Pr = MC.simpleReweight(T, T2, PP, EE)
+        info("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
+        Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         @time EEr2 = MC.energyReweight(T, T2[2], EE)
@@ -48,9 +48,9 @@ end
         CV2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
         CV[2] = MC.cv(EEr1, T2[1], C_H1)
         CV2[2] = MC.variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
-        @show reweight_data = [T2; Er; Pr; CV; CV2]
+        @show reweight_data = [T2 Er Pr CV CV2]
     else
-        reweight_data = []
+        reweight_data = zeros(length(T2),5)
     end
     return P, dP, E, dE, CV, CV2, τ, OP, reweight_data
 end
@@ -71,6 +71,8 @@ CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
 reweight_data = [ x[9] for x in result ]
+@show size(reweight_data)
+filter!(x->x≠0, reweight_data)
 @show size(reweight_data)
 
 data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CV2, tau=τ, OP=OP)
