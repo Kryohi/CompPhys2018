@@ -487,12 +487,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     pesi = pesi.*scale_factor
     # ora dev'essere uguale a E2mean, e rappresenta la distribuzione di boltzmann a T1
     @show sum(pesi.*(bins .+ δE/2)) / length(E)
-    #plot(nbin, label="orig", reuse=false)
-    #plot!(pesi)
-    #gui()
 
     ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
-    #ratio = filter!(x->x≠0, pesi) ./ filter!(x->x≠0, nbin)  # escludere anche valori molto bassi?
     ratio = zeros(Float64, length(pesi))
     for j=1:length(nbin)
         if nbin[j] >= 7 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
@@ -508,14 +504,6 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     gui()
 
     ## pesca di pesi configurazioni da ogni bin di nbin
-    for j=1:length(nbin)
-        if nbin[j] >= 7 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
-            ratio[j] = pesi[j] / nbin[j]
-        else
-            ratio[j] = 1.0
-        end
-    end
-
     E2 = zeros(length(E))
     count = zeros(Int64, length(pesi))
     for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila

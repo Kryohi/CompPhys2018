@@ -41,12 +41,12 @@ end
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         @time EEr2 = MC.energyReweight(T, T2[2], EE)
         CV, CV2 = zeros(2), zeros(2)
-        C_H1, C_H2 = MC.acf(EEr1, 35000), acf(EEr2, 35000)
+        C_H1, C_H2 = MC.acf(EEr1, 35000), MC.acf(EEr2, 35000)
         τ1, τ2 = sum(C_H1), sum(C_H2)
         CV[1] = MC.cv(EEr1, T2[1], C_H1)
-        CV2[1] = variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
+        CV2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
         CV[2] = MC.cv(EEr1, T2[1], C_H1)
-        CV2[2] = variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
+        CV2[2] = MC.variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
         reweight_data = DataFrame(T=T2, E=Er, P=Pr, CV=CV, CV2=CV2)
     else
         reweight_data = DataFrame() # dataframe vuoto :(
