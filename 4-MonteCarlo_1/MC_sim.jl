@@ -7,8 +7,9 @@ module MC
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # ...oppure come da appunti
+# sistemare/verificare parametro d'ordine
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin?)
+# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin)
 # kernel openCL?
 # provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
@@ -17,7 +18,7 @@ module MC
 # grafici
 # profit
 
-(VERSION >= v"0.7-") && (using Statistics)
+(VERSION >= v"0.7-") && (using Statistics; using Distributed)
 using DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
@@ -31,7 +32,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=12*10^5, csv=false, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*10^5, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -43,8 +44,8 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
-    @show D/a; println()
+    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
+    @show a/D; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
     @inbounds for n = 1:maxsteps
@@ -70,13 +71,12 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    C_H = acf(H, 33000)
+    @time C_H = acf(H, 35000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
     prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
     csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
-    ##anim && makeVideo(XX, T=T, rho=rho, D=D)
 
     return H, P, j./(3N), C_H, CV, CV2, OP
 end
@@ -150,8 +150,7 @@ function initializeSystem(N::Int, L)
     return X, a
 end
 
-# al momento setta solo D, vorremmo che facesse raggiungere anche l'eq termodinamico
-# DA RISCRIVERE USANDO 2 LOOP
+# bisognerebbe controllare meglio quando si è raggiunto l'eq termodinamico
 function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 12 # larghezza finestra su cui fissare D e calcolare tau
@@ -212,11 +211,11 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4)
 
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.7
+            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.69
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < minimum(τ[1:n÷wnd-1])
+                if n>wnd*3 && τ[n÷wnd] < minimum(τ[3:n÷wnd-1])
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -231,15 +230,17 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         end
     end
 
-    D_chosen == D0 && warn("No suitable Δ value was found, using default...")
+    if D_chosen == D0
+        warn("No suitable Δ value was found, using the latest found...")
+        D_chosen = D
+    end
 
-    boh = plot(C_H_tot, yaxis=("cose",(-1.0,2.7)), linewidth=1.5, label="autocorrelation")
-    plot!(boh, (H[1:10:end].-H[1].-0.5)./33, label="E-E[1]", linewidth=0.5)
-    plot!(boh, DD.*30, label="Δ*30")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/1000")
-    hline!(boh, [D_chosen*30], label="final Δ (*30)")
+    boh = plot(DD.*30, yaxis=("cose",(-1.0,2.7)), label="Δ*30")
+    plot!(boh, (H[1:10:end].-H[1].-0.42)./33, label="E-E[1]", linewidth=0.5)
+    plot!(C_H_tot, linewidth=1.5, label="acf")
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./2000, label="τ/2e3")
+    hline!(boh, [D_chosen*30], label="Δfin")
     gui()
-    @show D, D_chosen
 
     return X, D_chosen
 end
@@ -257,31 +258,6 @@ function shiftSystem!(A::Array{Float64,1}, L::Float64)
     @inbounds for j = 1:length(A)
         A[j] = A[j] - L*round(A[j]/L)
     end
-end
-
-# Da velocizzare
-function acf(H::Array{Float64,1}, k_max::Int64)
-
-    meanH = mean(H)
-    C_H = zeros(k_max)
-    CH1 = 0.0
-    @inbounds for i = 1:length(H)-k_max-1
-        CH1 += (H[i]-meanH) * (H[i]-meanH)
-    end
-    CH1 = CH1 / (length(H)-k_max)
-    C_H[1] = 1.0
-
-    bar = Progress(k_max, dt=1.0, desc="Calculating autocorrelation...", barglyphs=BarGlyphs("[=> ]"), barlen=33)
-    @inbounds for k = 2:k_max
-        C_H_temp = 0.0
-        @fastmath for i = 1:length(H)-k_max-1
-            C_H_temp += (H[i]-meanH) * (H[i+k-1]-meanH)
-        end
-        C_H_temp = C_H_temp / (length(H)-k_max)
-        C_H[k] = C_H_temp / CH1
-        next!(bar)
-    end
-    return C_H
 end
 
 
@@ -334,6 +310,44 @@ variance2(A::Array{Float64}, ch) =
 (mean(A.*A) - mean(A)^2) * (1-sum((1 .- (1:length(ch))./length(ch)).*ch)*2/length(A))
 
 cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
+
+
+# Da velocizzare
+function acf(H::Array{Float64,1}, k_max::Int64)
+
+    Z = H .- mean(H)
+    C_H = zeros(k_max)
+
+    if k_max>20000
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)
+    end
+
+    @fastmath for k = 1:k_max
+        C_H_temp = 0.0
+        for i = 1:length(H)-k_max-1
+            @inbounds C_H_temp += Z[i] * Z[i+k-1]
+        end
+        C_H[k] = C_H_temp
+        (k_max>20000) && next!(bar)
+    end
+    CH1 = C_H[1]/(length(H)-k_max)
+
+    return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
+end
+
+function fft_acf(H::Array{Float64,1}, k_max=2^15)
+
+    Z = H .- mean(H)
+    N = length(Z)
+    C_H = zeros(k_max)
+    fvi = fft(Z, k_max)
+    acf = fvi .* conj.(fvi)
+    acf = ifft(acf)
+    acf = real.(acf[1:N])
+    C_H = acf(1:k_max+1)
+
+    return C_H
+end
 
 
 @fastmath function orderParameter(r::Array{Float64}, L::Float64)
@@ -390,30 +404,6 @@ function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
 end
 
 
-# makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
-# don't run this with more than ~1000 frames unless you have a lot of spare time...
-# function makeVideo(M; T=-1, rho=-1, fps = 30, D=-1.0, showCM=false)
-#     close("all")
-#     Plots.default(size=(1280,1080))
-#     N = Int(size(M,1)/3)
-#     rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
-#     println("\nI'm cooking pngs to make a nice video. It will take some time...")
-#     prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
-#
-#     anim = @animate for i =1:size(M,2)
-#         Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7,
-# xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
-#         if showCM   # add center of mass indicator
-#             cm = avg3D(M[:,i])
-#             scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
-#         end
-#         next!(prog) # increment the progress bar
-#     end
-#     file = string("./Video/LJ",N,"_T",T,"_d",rho,"_D",D,".mp4")
-#     mp4(anim, file, fps = fps)
-#     gui() #show the last frame in a separate window
-# end
-
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
@@ -439,8 +429,104 @@ end
 ## Miscellaneous
 ##
 
+function simpleReweight(T0::Float64, T1::Float64, O::Array{Float64}, E::Array{Float64})
+    if length(O) == length(E)
+        return sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+    else
+        warn("Dimension mismatch between O and E, returning 0...")
+        return 0.0
+    end
+end
+
+function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::Array{Float64})
+    if length(O[:,1]) == length(E[:,1])
+        O2 = zeros(length(TT))
+        i = 1
+        for T1 in TT
+            O2[i] = sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
+            i += 1
+        end
+        return O2
+    else
+        warn("Dimension mismatch between O and E, returning 0...")
+        return zeros(length(TT))
+    end
+end
+
+# fa binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta
+# poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere numero pesi)
+function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
+
+    ## Binning  (da ricontrollare e velocizzare)
+    bins = linspace(minimum(E), maximum(E), length(E)/10000)
+    δE = bins[2] - bins[1];
+    ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
+    nbin = zeros(Int64, length(bins))
+
+    for i=1:length(E)
+        @inbounds for j=1:length(bins)
+            if E[i] <= bins[j]
+                ebin[i] = j
+                nbin[j] += 1
+                break
+            end
+        end
+    end
+
+    ## Creazione bin ripesati per nuova temperatura
+    nbin_new = nbin .* exp.((1/T0-1/T1) .* (bins .+ δE/2)) ./ sum(exp.((1/T0-1/T1) .* (bins .+ δE/2)))
+    pesi = nbin_new ./ maximum(nbin_new)
+
+    num, den = 0.0, 0.0
+    @inbounds for i=1:length(E) # calcola E media ripesata
+        num += pesi[ebin[i]]*E[i]*exp((1/T0-1/T1)*E[i])
+        den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])
+    end
+    E2mean = num/den  # energia media ripesata, da forzare
+    wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)
+    oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # inutile, ma da capire perché è sottostimata
+    @show scale_factor = E2mean/wrongmean
+    pesi = pesi.*scale_factor
+    # ora dev'essere uguale a E2mean, e rappresenta la distribuzione di boltzmann a T1
+    #@show sum(pesi.*(bins .+ δE/2)) / length(E)
+
+    ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
+    ratio = zeros(Float64, length(pesi))
+    @inbounds for j=1:length(nbin)
+        # 100 numero arbitrario, se nuovi bin superano vecchi solo in code poco popolate chissene
+        if pesi[j]/nbin[j] < 1 || nbin[j] >= 42
+            ratio[j] = pesi[j] / nbin[j]
+        else
+            ratio[j] = 1.0
+        end
+    end
+    # se ratio[qualsiasi] maggiore di 1 vuol dire che la nuova distr si sta prendendo
+    # più configurazioni di quelle disponibili, e si riscala pesi di conseguenza
+    @show maxratio = maximum(ratio)
+    maxratio>3 && warn("Possibly too few samples avalaible for reweighting, caution with the results")
+    pesi = pesi ./ maxratio
+    plot(nbin, label="orig")
+    plot!(pesi)
+    gui()
+
+    ## pesca di pesi configurazioni da ogni bin di nbin
+    E2 = zeros(length(E))
+    count = zeros(Int64, length(pesi))
+    for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
+        if count[ebin[i]] <= pesi[ebin[i]]
+            E2[i] = E[i]
+            count[ebin[i]] += 1
+        end
+    end
+    filter!(x->x≠0, E2)
+    (length(E2)<length(E)/10) && warn("Reweighted energy samples low")
+    return E2
+end
+
+
 function prettyPrint(T::Float64, rho::Float64, E::Array, P::Array, ch::Array, cv, cv2, OP::Array)
-    println("\nMean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
+    println("\n")
+    println("Mean energy: ", mean(E), " ± ", sqrt(variance2(E,ch)))
     println("Pressure: ", mean(P), " ± ", std(P))
     println("Specific heat: ", cv)
     println("Specific heat (alternative) : ", cv2)
@@ -469,5 +555,6 @@ function vecboxMuller(sigma::Float64, N::Int, x0=0.0)
     x2 = rand(Int(N/2))
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
 end
+
 
 end
