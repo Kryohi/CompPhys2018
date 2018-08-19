@@ -73,7 +73,7 @@ CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
 reweight_data = [ x[9] for x in result ]
-rd = vcat(reweight_data...)
+rd = vcat(reweight_data...) # see splatting in docs
 filter!(x->x≠0, rd)
 @show size(rd)
 

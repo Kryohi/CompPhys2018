@@ -335,18 +335,18 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
 end
 
-function fft_acf(H::Array{Float64,1}, k_max=2^15)
+function fft_acf(H::Array{Float64,1}, k_max::Int)
 
     Z = H .- mean(H)
     N = length(Z)
     C_H = zeros(k_max)
-    fvi = fft(Z, k_max)
+    fvi = rfft(Z)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
-    acf = real.(acf[1:N])
-    C_H = acf(1:k_max+1)
+    acf = real.(acf)
+    C_H = acf[1:k_max+1]
 
-    return C_H
+    return C_H./C_H[1]
 end
 
 
