@@ -33,10 +33,25 @@ end
     τ = sum(C_H)
     OP, dOP = mean(OP), std(OP)
 
-    @show T2 = [T-0.01, T+0.01]
-    @time Er = MC.reweight(T, T2, EE, EE)
-
-    return P, dP, E, dE, CV, CV2, τ, OP
+    # Reweighting
+    if T>0.18 && T<0.5
+        @show T2 = [T-0.01, T+0.01]
+        Pr = MC.simpleReweight(T, T2, PP, EE)
+        Er = MC.simpleReweight(T, T2, EE, EE)
+        @time EEr1 = MC.energyReweight(T, T2[1], EE)
+        @time EEr2 = MC.energyReweight(T, T2[2], EE)
+        CV, CV2 = zeros(2), zeros(2)
+        C_H1, C_H2 = MC.acf(EEr1, 35000), acf(EEr2, 35000)
+        τ1, τ2 = sum(C_H1), sum(C_H2)
+        CV[1] = MC.cv(EEr1, T2[1], C_H1)
+        CV2[1] = variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
+        CV[2] = MC.cv(EEr1, T2[1], C_H1)
+        CV2[2] = variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
+        reweight_data = DataFrame(T=T2, E=Er, P=Pr, CV=CV, CV2=CV2)
+    else
+        reweight_data = DataFrame() # dataframe vuoto :(
+    end
+    return P, dP, E, dE, CV, CV2, τ, OP, reweight_data
 end
 
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
@@ -52,8 +67,9 @@ V = N./ρ
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
 E, dE = [ x[3] for x in result ], [ x[4] for x in result ]
 CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
-τ = [ x[7] for x in result ]
+τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
+reweight_data = [ x[9] for x in result ]
 
 data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CV2, tau=τ, OP=OP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")

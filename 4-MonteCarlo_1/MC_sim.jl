@@ -459,7 +459,7 @@ end
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
     bins = linspace(minimum(E), maximum(E), length(E)/10000)
-    δE = bins[42] - bins[41];
+    δE = bins[2] - bins[1];
     ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
     nbin = zeros(Int64, length(bins))
 
@@ -476,27 +476,56 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     pesi = nbin_new ./ maximum(nbin_new)
 
     num, den = 0.0, 0.0
-    for i=1:length(E)
+    @inbounds for i=1:length(E) # calcola E media ripesata
         num += pesi[ebin[i]]*E[i]*exp((1/T0-1/T1)*E[i])
         den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])
     end
     @show E2mean = num/den  # energia media ripesata, da forzare
-    @show wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)    # media pesata di energia con pesi non scalati
-    @show oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # capire perché è sottostimata
+    wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)
+    @show oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # inutile, ma da capire perché è sottostimata
     @show scale_factor = E2mean/wrongmean
     pesi = pesi.*scale_factor
+    # ora dev'essere uguale a E2mean, e rappresenta la distribuzione di boltzmann a T1
     @show sum(pesi.*(bins .+ δE/2)) / length(E)
+    #plot(nbin, label="orig", reuse=false)
+    #plot!(pesi)
+    #gui()
 
-    plot(nbin, label="orig")
-    plot!(pesi)
+    ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
+    #ratio = filter!(x->x≠0, pesi) ./ filter!(x->x≠0, nbin)  # escludere anche valori molto bassi?
+    ratio = zeros(Float64, length(pesi))
+    for j=1:length(nbin)
+        if nbin[j] >= 7 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
+            ratio[j] = pesi[j] / nbin[j]
+        else
+            ratio[j] = 1.0
+        end
+    end
+    @show maxratio = maximum(ratio)
+    pesi = pesi ./ maxratio
+    plot(nbin, label="orig", reuse=false)
+    plot!(pesi,reuse=false)
     gui()
-    # for i=1:length(E)
-    #     if pesi[ebin[i]] >= rand()      # probabilmente sbagliato
-    #         E2[i] = E[i]
-    #     end
-    # end
 
-    return E2mean
+    ## pesca di pesi configurazioni da ogni bin di nbin
+    for j=1:length(nbin)
+        if nbin[j] >= 7 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
+            ratio[j] = pesi[j] / nbin[j]
+        else
+            ratio[j] = 1.0
+        end
+    end
+
+    E2 = zeros(length(E))
+    count = zeros(Int64, length(pesi))
+    for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
+        if count[ebin[i]] <= pesi[ebin[i]]
+            E2[i] = E[i]
+            count[ebin[i]] += 1
+        end
+    end
+
+    return filter(x->x≠0, E2)
 end
 
 
