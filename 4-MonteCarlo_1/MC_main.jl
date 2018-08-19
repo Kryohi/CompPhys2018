@@ -37,17 +37,19 @@ end
     T2 = [T-0.01; T+0.01]
     @time if T>0.18 && T<0.5
         info("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
-        Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])
+        Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])    # 200 sarebbe l'fstep deprecato...
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         @time EEr2 = MC.energyReweight(T, T2[2], EE)
         CV, CV2 = zeros(2), zeros(2)
-        C_H1, C_H2 = MC.acf(EEr1, 35000), MC.acf(EEr2, 35000)
-        τ1, τ2 = sum(C_H1), sum(C_H2)
-        CV[1] = MC.cv(EEr1, T2[1], C_H1)
-        CV2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
-        CV[2] = MC.cv(EEr1, T2[1], C_H1)
-        CV2[2] = MC.variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
+        if length(EEr1) > 5*10^5 && length(EEr1) > 5*10^5
+            C_H1, C_H2 = MC.acf(EEr1, 35000), MC.acf(EEr2, 35000)
+            τ1, τ2 = sum(C_H1), sum(C_H2)
+            CV[1] = MC.cv(EEr1, T2[1], C_H1)
+            CV2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
+            CV[2] = MC.cv(EEr1, T2[1], C_H1)
+            CV2[2] = MC.variance(EEr2[1:ceil(Int,τ2/5):end])/T2[2]^2 + 1.5T2[2]
+        end
         @show reweight_data = [T2 Er Pr CV CV2]
     else
         reweight_data = zeros(length(T2),5)
@@ -56,13 +58,14 @@ end
 end
 
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
-T = 0.16:0.04:0.52
+T = 0.16:0.04:0.44
 N = 32
 ρ = 0.18
 V = N./ρ
 
 # map the parallelPV function to the ρ array
 @time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
+println("Yu huuu")
 
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]

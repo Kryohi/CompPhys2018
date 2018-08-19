@@ -32,7 +32,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=18*10^5, csv=false, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*10^5, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -44,7 +44,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxsteps=
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D = burnin(X, D, T, L, a, bmaxsteps)  # evolve until at equilibrium, while tuning Δ
+    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
     @show a/D; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -335,11 +335,16 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
 end
 
-function fft_acf(H::Array{Float64,1}, k_max::Int64)
+function fft_acf(H::Array{Float64,1}, k_max=2^15)
 
     Z = H .- mean(H)
+    N = length(Z)
     C_H = zeros(k_max)
-
+    fvi = fft(Z, k_max)
+    acf = fvi .* conj.(fvi)
+    acf = ifft(acf)
+    acf = real.(acf[1:N])
+    C_H = acf(1:k_max+1)
 
     return C_H
 end
@@ -399,30 +404,6 @@ function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
 end
 
 
-# makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
-# don't run this with more than ~1000 frames unless you have a lot of spare time...
-# function makeVideo(M; T=-1, rho=-1, fps = 30, D=-1.0, showCM=false)
-#     close("all")
-#     Plots.default(size=(1280,1080))
-#     N = Int(size(M,1)/3)
-#     rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
-#     println("\nI'm cooking pngs to make a nice video. It will take some time...")
-#     prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
-#
-#     anim = @animate for i =1:size(M,2)
-#         Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)),w=7,
-# xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
-#         if showCM   # add center of mass indicator
-#             cm = avg3D(M[:,i])
-#             scatter!([cm[1]],[cm[2]],[cm[3]], m=(16,0.9,:red,Plots.stroke(0)))
-#         end
-#         next!(prog) # increment the progress bar
-#     end
-#     file = string("./Video/LJ",N,"_T",T,"_d",rho,"_D",D,".mp4")
-#     mp4(anim, file, fps = fps)
-#     gui() #show the last frame in a separate window
-# end
-
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
@@ -472,11 +453,11 @@ function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::A
     end
 end
 
-# fa un binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta
-# poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere il numero pesi)
+# fa binning delle energie, crea dei pesi usando boltzmann, che poi normalizza imponendo la media giusta
+# poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere numero pesi)
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
-    ## Binning  (da ricontrollare)
+    ## Binning  (da ricontrollare e velocizzare)
     bins = linspace(minimum(E), maximum(E), length(E)/10000)
     δE = bins[2] - bins[1];
     ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
@@ -512,13 +493,14 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
     ratio = zeros(Float64, length(pesi))
     for j=1:length(nbin)
-        if nbin[j] >= 25 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
+        if nbin[j] >= 25 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate chissene
             ratio[j] = pesi[j] / nbin[j]
         else
             ratio[j] = 1.0
         end
     end
     @show maxratio = maximum(ratio)
+    maxratio>3 && warn("Possibly too few samples avalaible for reweighting, caution with the results")
     pesi = pesi ./ maxratio
     plot(nbin, label="orig")
     plot!(pesi)
@@ -533,8 +515,9 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
             count[ebin[i]] += 1
         end
     end
-
-    return filter(x->x≠0, E2)
+    filter!(x->x≠0, E2)
+    (length(E2)<length(E)/10) && warn("Reweighted energy samples low")
+    return E2
 end
 
 
@@ -569,5 +552,6 @@ function vecboxMuller(sigma::Float64, N::Int, x0=0.0)
     x2 = rand(Int(N/2))
     @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
 end
+
 
 end
