@@ -482,13 +482,13 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
         num += pesi[ebin[i]]*E[i]*exp((1/T0-1/T1)*E[i])
         den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])
     end
-    @show E2mean = num/den  # energia media ripesata, da forzare
+    E2mean = num/den  # energia media ripesata, da forzare
     wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)
-    @show oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # inutile, ma da capire perché è sottostimata
+    oldmean = sum(nbin.*(bins .+ δE/2)) / length(E)   # inutile, ma da capire perché è sottostimata
     @show scale_factor = E2mean/wrongmean
     pesi = pesi.*scale_factor
     # ora dev'essere uguale a E2mean, e rappresenta la distribuzione di boltzmann a T1
-    @show sum(pesi.*(bins .+ δE/2)) / length(E)
+    #@show sum(pesi.*(bins .+ δE/2)) / length(E)
 
     ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
     ratio = zeros(Float64, length(pesi))
