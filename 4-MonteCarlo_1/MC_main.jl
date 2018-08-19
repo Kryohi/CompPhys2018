@@ -34,8 +34,9 @@ end
     OP, dOP = mean(OP), std(OP)
 
     # Reweighting
-    if T>0.18 && T<0.5
+    @time if T>0.18 && T<0.5
         @show T2 = [T-0.01, T+0.01]
+        info("Reweighting distribution at ", T2[1], " and ", T2[2])
         Pr = MC.simpleReweight(T, T2, PP, EE)
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
@@ -70,7 +71,7 @@ CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
 reweight_data = [ x[9] for x in result ]
-
+@show size(reweight_data)
 
 data = DataFrame(T=T, E=E, dE=dE, P=P, dP=dP, Cv=CV, Cv2=CV2, tau=τ, OP=OP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
