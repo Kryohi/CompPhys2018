@@ -476,6 +476,7 @@ end
 # poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere il numero pesi)
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
+    ## Binning  (da ricontrollare)
     bins = linspace(minimum(E), maximum(E), length(E)/10000)
     δE = bins[2] - bins[1];
     ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
@@ -490,6 +491,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
             end
         end
     end
+
+    ## Creazione bin ripesati per nuova temperatura
     nbin_new = nbin .* exp.((1/T0-1/T1) .* (bins .+ δE/2)) ./ sum(exp.((1/T0-1/T1) .* (bins .+ δE/2)))
     pesi = nbin_new ./ maximum(nbin_new)
 
@@ -509,7 +512,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ## rescaling (nuovamente) di pesi per far contenere la distribuzione interamente in nbin
     ratio = zeros(Float64, length(pesi))
     for j=1:length(nbin)
-        if nbin[j] >= 7 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
+        if nbin[j] >= 25 # arbitrario, se nuovi bin superano vecchi solo in code poco popolate ce ne freghiamo
             ratio[j] = pesi[j] / nbin[j]
         else
             ratio[j] = 1.0
@@ -517,8 +520,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     end
     @show maxratio = maximum(ratio)
     pesi = pesi ./ maxratio
-    plot(nbin, label="orig", reuse=false)
-    plot!(pesi,reuse=false)
+    plot(nbin, label="orig")
+    plot!(pesi)
     gui()
 
     ## pesca di pesi configurazioni da ogni bin di nbin
