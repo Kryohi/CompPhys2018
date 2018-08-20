@@ -1,5 +1,5 @@
 
-using Plots, DataFrames, ProgressMeter, CSV
+using Plots, DataFrames, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
 import MC
@@ -7,7 +7,7 @@ import MC
 if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
-@everywhere using Plots, DataFrames, ProgressMeter, CSV
+#@everywhere using Plots, DataFrames, ProgressMeter, CSV
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
@@ -58,7 +58,7 @@ end
 end
 
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
-T = 0.16:0.04:0.44
+#T = 0.16:0.04:0.44
 N = 32
 ρ = 0.12
 V = N./ρ
@@ -89,8 +89,8 @@ P1 = plot(T, CV2, label="CV2", reuse = false)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
-P2 = plot(T, CV, label="CV", reuse = false)
-plot!(data_r[:T], data_r[:Cv,], label="CV reweight")
+P2 = scatter(T, CV, label="CV", reuse = false)
+scatter!(data_r[:T], data_r[:Cv,], label="CV reweight")
 gui()
 file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P2,file)

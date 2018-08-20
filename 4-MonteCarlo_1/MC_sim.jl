@@ -330,9 +330,9 @@ function acf(H::Array{Float64,1}, k_max::Int64)
         C_H[k] = C_H_temp
         (k_max>20000) && next!(bar)
     end
-    CH1 = C_H[1]/(length(H)-k_max)
+    CH1 = C_H[1]/(length(H))    # togliere o non togliere k_max, questo è il dilemma
 
-    return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
+    return C_H ./ (CH1*length(H))    # unbiased and normalized autocorrelation function
 end
 
 function fft_acf(H::Array{Float64,1}, k_max::Int)
@@ -344,7 +344,7 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
     acf = real.(acf)
-    C_H = acf[1:k_max+1]
+    C_H = acf[1:k_max]
 
     return C_H./C_H[1]
 end
