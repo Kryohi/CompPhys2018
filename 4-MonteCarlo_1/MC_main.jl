@@ -7,8 +7,7 @@ import MC
 if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
-#@everywhere using Plots, DataFrames, ProgressMeter, CSV
-@everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
+@everywhere push!(LOAD_PATH, string(pwd(),"jgjg")) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 
@@ -43,7 +42,7 @@ end
         @time EEr2 = MC.energyReweight(T, T2[2], EE)
         CVr, CVr2 = zeros(2), zeros(2)
         if length(EEr1) > 5*10^5 && length(EEr1) > 5*10^5
-            C_H1, C_H2 = MC.acf(EEr1, 35000), MC.acf(EEr2, 35000)
+            C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
             τ1, τ2 = sum(C_H1), sum(C_H2)
             CVr[1] = MC.cv(EEr1, T2[1], C_H1)
             CVr2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]

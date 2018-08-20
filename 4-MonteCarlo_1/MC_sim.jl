@@ -70,8 +70,9 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
     end
     H = U.+3N*T/2
     P = P2.+rho*T
+    gc()
 
-    @time C_H = acf(H, 35000)
+    @time C_H = fft_acf(H, 35000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -201,7 +202,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         if n%wnd == 0
             DD[Int(n÷wnd*k_max-k_max+1):Int(n÷wnd*k_max)] .= D # per grafico stupido
 
-            C_H = acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
+            C_H = fft_acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
             C_H_tot = [C_H_tot; C_H]
             τ[n÷wnd] = sum(C_H)
             # if τ results negative, we put it to a high number to simplify the next conditionals
