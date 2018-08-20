@@ -18,7 +18,7 @@ module MC
 # grafici
 # profit
 
-(VERSION >= v"0.7-") && (using Statistics; using Distributed)
+(VERSION >= v"0.7-") && (using Statistics, FFTW, Distributed)
 using DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"

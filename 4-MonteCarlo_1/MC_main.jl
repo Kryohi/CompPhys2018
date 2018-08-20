@@ -34,7 +34,7 @@ end
     OP, dOP = mean(OP), std(OP)
 
     # Reweighting
-    T2 = [T-0.01; T+0.01]
+    T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
     @time if T>0.18 && T<0.5
         info("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
         Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])    # 200 sarebbe l'fstep deprecato...
@@ -60,7 +60,7 @@ end
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
 T = 0.16:0.04:0.44
 N = 32
-ρ = 0.18
+ρ = 0.12
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -73,10 +73,11 @@ CV, CV2 = [ x[5] for x in result ], [ x[6] for x in result ]
 τ = [ x[7] for x in result ]    # utile solo temporaneamente
 OP = [ x[8] for x in result ]
 reweight_data = [ x[9] for x in result ]
-rd = vcat(reweight_data...) # see splatting in docs
-filter!(x->x≠0, rd)
-@show size(rd)
+rd = filter(x -> x ≠ zeros(size(reweight_data[1])), reweight_data)
+rd = vcat(rd...) # see splatting in docs
 
+
+# save and plot the data
 data = DataFrame(T=T, E=E, P=P, Cv=CV, Cv2=CV2, tau=τ, OP=OP, dE=dE, dP=dP)
 file = string("./Data/MC_",N,"_rho",ρ,"_T",T[1],"-",T[end],".csv")
 CSV.write(file, data)
@@ -89,6 +90,7 @@ gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
 P2 = plot(T, CV, label="CV", reuse = false)
+plot!(data_r[:T], data_r[:Cv,], label="CV reweight")
 gui()
 file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P2,file)
