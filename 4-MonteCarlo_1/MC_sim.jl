@@ -214,7 +214,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < abs(minimum(τ[3:n÷wnd-1]))
+                if n>wnd*3 && τ[n÷wnd] < minimum(abs.(τ[3:n÷wnd-1]))
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
