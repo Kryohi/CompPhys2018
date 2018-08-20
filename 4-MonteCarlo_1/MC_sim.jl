@@ -504,9 +504,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     @show maxratio = maximum(ratio)
     maxratio>3 && warn("Possibly too few samples avalaible for reweighting, caution with the results")
     pesi = pesi ./ maxratio
-    plot(nbin, label="orig")
-    plot!(pesi)
-    gui()
+    #plot(nbin, label="orig")
+    #plot!(pesi); gui()
 
     ## pesca di pesi configurazioni da ogni bin di nbin
     E2 = zeros(length(E))
