@@ -7,7 +7,7 @@ import MC
 if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
-@everywhere push!(LOAD_PATH, string(pwd(),"jgjg")) # add current working directory to LOAD path
+@everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
 

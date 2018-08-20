@@ -205,8 +205,6 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             C_H = fft_acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
             C_H_tot = [C_H_tot; C_H]
             τ[n÷wnd] = sum(C_H)
-            # if τ results negative, we put it to a high number to simplify the next conditionals
-            τ[n÷wnd]<0 ? τ[n÷wnd]=42e5 : nothing
 
             # average acceptance ratio in current window
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
@@ -216,7 +214,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < minimum(τ[3:n÷wnd-1])
+                if n>wnd*3 && τ[n÷wnd] < abs(minimum(τ[3:n÷wnd-1]))
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
