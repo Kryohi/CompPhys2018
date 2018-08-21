@@ -70,8 +70,9 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
     end
     H = U.+3N*T/2
     P = P2.+rho*T
+    gc()
 
-    @time C_H = acf(H, 35000)
+    @time C_H = fft_acf(H, 35000)
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -201,11 +202,9 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
         if n%wnd == 0
             DD[Int(n÷wnd*k_max-k_max+1):Int(n÷wnd*k_max)] .= D # per grafico stupido
 
-            C_H = acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
+            C_H = fft_acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
             C_H_tot = [C_H_tot; C_H]
             τ[n÷wnd] = sum(C_H)
-            # if τ results negative, we put it to a high number to simplify the next conditionals
-            τ[n÷wnd]<0 ? τ[n÷wnd]=42e5 : nothing
 
             # average acceptance ratio in current window
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
@@ -215,7 +214,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet.
-                if n>wnd*3 && τ[n÷wnd] < minimum(τ[3:n÷wnd-1])
+                if n>wnd*3 && τ[n÷wnd] < minimum(abs.(τ[3:n÷wnd-1]))
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -330,9 +329,9 @@ function acf(H::Array{Float64,1}, k_max::Int64)
         C_H[k] = C_H_temp
         (k_max>20000) && next!(bar)
     end
-    CH1 = C_H[1]/(length(H)-k_max)
+    CH1 = C_H[1]/(length(H))    # togliere o non togliere k_max, questo è il dilemma
 
-    return C_H ./ (CH1*(length(H)-k_max))    # unbiased and normalized autocorrelation function
+    return C_H ./ (CH1*length(H))    # unbiased and normalized autocorrelation function
 end
 
 function fft_acf(H::Array{Float64,1}, k_max::Int)
@@ -344,7 +343,7 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
     acf = real.(acf)
-    C_H = acf[1:k_max+1]
+    C_H = acf[1:k_max]
 
     return C_H./C_H[1]
 end
@@ -505,9 +504,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     @show maxratio = maximum(ratio)
     maxratio>3 && warn("Possibly too few samples avalaible for reweighting, caution with the results")
     pesi = pesi ./ maxratio
-    plot(nbin, label="orig")
-    plot!(pesi)
-    gui()
+    #plot(nbin, label="orig")
+    #plot!(pesi); gui()
 
     ## pesca di pesi configurazioni da ogni bin di nbin
     E2 = zeros(length(E))

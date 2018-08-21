@@ -1,5 +1,5 @@
 
-using Plots, DataFrames, ProgressMeter, CSV
+using Plots, DataFrames, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
 import MC
@@ -7,7 +7,6 @@ import MC
 if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
-@everywhere using Plots, DataFrames, ProgressMeter, CSV
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere import MC  # add module with all the functions in MC_sim.jl
@@ -25,7 +24,7 @@ end
 @everywhere function parallelMC(rho, N, T, Tarray)
     info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=10*10^6, Df=(1/76))
+    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=11*10^6, Df=(1/76))
 
     info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
     E, dE = mean(EE), std(EE)   # usare variance2?
@@ -35,15 +34,15 @@ end
 
     # Reweighting
     T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
-    @time if T>0.18 && T<0.5
+    if T<0.7
         info("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
         Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])    # 200 sarebbe l'fstep deprecato...
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
-        @time EEr2 = MC.energyReweight(T, T2[2], EE)
+        EEr2 = MC.energyReweight(T, T2[2], EE)
         CVr, CVr2 = zeros(2), zeros(2)
         if length(EEr1) > 5*10^5 && length(EEr1) > 5*10^5
-            C_H1, C_H2 = MC.acf(EEr1, 35000), MC.acf(EEr2, 35000)
+            C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
             τ1, τ2 = sum(C_H1), sum(C_H2)
             CVr[1] = MC.cv(EEr1, T2[1], C_H1)
             CVr2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
@@ -58,9 +57,9 @@ end
 end
 
 T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
-T = 0.16:0.04:0.44
+#T = 0.16:0.04:0.44
 N = 32
-ρ = 0.12
+ρ = 0.1
 V = N./ρ
 
 # map the parallelPV function to the ρ array
@@ -89,8 +88,8 @@ P1 = plot(T, CV2, label="CV2", reuse = false)
 gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
-P2 = plot(T, CV, label="CV", reuse = false)
-plot!(data_r[:T], data_r[:Cv,], label="CV reweight")
+P2 = scatter(T, CV, label="CV", reuse = false)
+scatter!(data_r[:T], data_r[:Cv,], label="CV reweight")
 gui()
 file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P2,file)
