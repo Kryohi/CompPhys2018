@@ -1,15 +1,16 @@
 
 using Plots, DataFrames, CSV
+(VERSION >= v"0.7-") && (using Statistics, Distributed)
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
-import MC
+(VERSION < v"0.7-") && import MC
 
 if nprocs()<4
   addprocs(4)   # add local worker processes (where N is the number of logical cores)
 end
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
-@everywhere import MC  # add module with all the functions in MC_sim.jl
+@everywhere (VERSION < v"0.7-") && import MC  # add module with all the functions in MC_sim.jl
 
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
@@ -63,7 +64,7 @@ N = 32
 V = N./ρ
 
 # map the parallelPV function to the ρ array
-@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
+#@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
 
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
