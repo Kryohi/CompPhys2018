@@ -41,7 +41,7 @@ end
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         EEr2 = MC.energyReweight(T, T2[2], EE)
         CVr, CVr2 = zeros(2), zeros(2)
-        if length(EEr1) > 5*10^5 && length(EEr1) > 5*10^5
+        if length(EEr1) > 5*10^5 && length(EEr2) > 5*10^5
             C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
             τ1, τ2 = sum(C_H1), sum(C_H2)
             CVr[1] = MC.cv(EEr1, T2[1], C_H1)
