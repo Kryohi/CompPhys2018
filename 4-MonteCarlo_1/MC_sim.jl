@@ -2,21 +2,17 @@ module MC
 
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
-# aumentare raggio di autocorrelazione per scelta di D
 # recuperare dati da fase di termalizzazione?
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
-# ...oppure come da appunti
 # sistemare/verificare parametro d'ordine
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin)
+# ricontrollare fft_acf
 # kernel openCL?
-# provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
-# implementare reweighting per raffinare picco
 # trovare picco per diverse ρ
 # grafici
-# profit
+# riscrivere in C+OpenMPI
 
 (VERSION >= v"0.7-") && (using Statistics, FFTW, Distributed)
 using DataFrames, CSV, ProgressMeter, PyCall, Plots
@@ -43,7 +39,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
-    D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    D = a*Df    # initial Δ is passed as a fraction of lattice step a
     X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
     @show a/D; println()
 
@@ -70,9 +66,8 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
     end
     H = U.+3N*T/2
     P = P2.+rho*T
-    gc()
 
-    @time C_H = fft_acf(H, 35000)
+    @time C_H = fft_acf(H, 36000)   # don't put more than ~36k if using non-fft acf
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -85,36 +80,17 @@ end
 
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
-function metropolis_MP(; N=108, T=.7, rho=.2, Df=1/70, maxsteps=10^6)
+function metropolis_MP(; N=108, T=.4, rho=.2, Df=1/70, maxsteps=10^6, bmaxs=18*10^5)
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
+    D = a*Df    # initial Δ is passed as a fraction of lattice step a
+    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
+    @show a/D; println()
+
 
     function metropolis(X::Array{Float64}, seed::Int, steps::Int64) # da portare fuori prima o poi
-        Y = zeros(3N)   # array of proposals
-        E, P2, j = 0.0, 0.0, 0.0
-        srand(seed)
-        for i = 1:steps
-            Y .= X .+ D.*(rand(3N).-0.5)    # Proposal
-            shiftSystem!(Y,L)
-            ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-            η = rand(3N)
-            @inbounds for i = 1:length(X)
-                if η[i] < ap
-                    X[i] = Y[i]
-                    j += 1
-                end
-            end
-            E += energy(X,L)
-            P2 += vpressure(X,L)
-        end
-        @show P2/steps
-        @show j/steps
-        return E/steps, P2/steps, j/steps
+
     end
 
     R = pmap(n -> metropolis(X, n, maxsteps÷4), [68 42 1 69]')
@@ -122,9 +98,14 @@ function metropolis_MP(; N=108, T=.7, rho=.2, Df=1/70, maxsteps=10^6)
 
     H = mean(U) + 3N*T/2
     P = mean(P2)+rho*T
-    CV = 0.0 #cv(H,T)
-    prettyPrint(T, rho, H, P, CV)
-    return H, P, CV, jbi, mean(j)/3N
+    @time C_H = fft_acf(H, 36000)
+    τ = sum(C_H)
+    CV = cv(H,T,C_H)
+    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
+    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
+
+    return H, P, j./(3N), C_H, CV, CV2, OP
 end
 
 
