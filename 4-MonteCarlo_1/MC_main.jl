@@ -1,15 +1,12 @@
 
-using Plots, DataFrames, CSV
-(VERSION >= v"0.7-") && (using Statistics, Distributed)
+using Statistics, Distributed, Plots, DataFrames, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
-#(VERSION < v"0.7-") && import MC
 
 nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number of logical cores)
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere using Statistics, FFTW, Distributed
-#@everywhere (VERSION < v"0.7-") && import MC  # add module with all the functions in MC_sim.jl
 
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
@@ -58,9 +55,9 @@ nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number 
 end
 
 T = [0.04:0.02:0.72; 0.76:0.04:1.24] # set per lavoro tutta notte # aumentare divisore se ρ bassa
-#T = 0.16:0.04:0.44
+#T = 0.055:0.005:0.2
 N = 32
-ρ = 0.02
+ρ = 0.07
 V = N./ρ
 
 # map the parallelPV function to the ρ array

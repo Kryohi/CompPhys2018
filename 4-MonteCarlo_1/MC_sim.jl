@@ -15,8 +15,7 @@ module MC
 # grafici
 # riscrivere in C+OpenMPI
 
-(VERSION >= v"0.7-") && (using Statistics, FFTW, Distributed)
-using DataFrames, CSV, ProgressMeter, PyCall, Plots
+using Statistics, FFTW, Distributed, DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
@@ -474,7 +473,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ratio = zeros(Float64, length(pesi))
     @inbounds for j=1:length(nbin)
         # 100 numero arbitrario, se nuovi bin superano vecchi solo in code poco popolate chissene
-        if pesi[j]/nbin[j] < 1 || nbin[j] >= 42
+        if pesi[j]/nbin[j] < 1 || nbin[j] >= 69
             ratio[j] = pesi[j] / nbin[j]
         else
             ratio[j] = 1.0
