@@ -1,16 +1,12 @@
 
-using Plots, DataFrames, CSV
-(VERSION >= v"0.7-") && (using Statistics, Distributed)
+using Statistics, Distributed, Plots, DataFrames, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
-(VERSION < v"0.7-") && import MC
 
-if nprocs()<4
-  addprocs(4)   # add local worker processes (where N is the number of logical cores)
-end
+nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number of logical cores)
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
-@everywhere (VERSION < v"0.7-") && import MC  # add module with all the functions in MC_sim.jl
+@everywhere using Statistics, FFTW, Distributed
 
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
@@ -23,11 +19,11 @@ end
 ##
 
 @everywhere function parallelMC(rho, N, T, Tarray)
-    info("Run ", find(Tarray.==T)[1], "/", length(Tarray))
+    @info string("Run ", findfirst(Tarray.==T), "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
     EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=11*10^6, Df=(1/76))
 
-    info("Run ", find(Tarray.==T)[1], " finished, with tau = ", sum(C_H))
+    @info string("Run ", findfirst(Tarray.==T), " finished, with tau = ", sum(C_H))
     E, dE = mean(EE), std(EE)   # usare variance2?
     P, dP = mean(PP), std(PP)
     τ = sum(C_H)
@@ -36,11 +32,12 @@ end
     # Reweighting
     T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
     if T<0.7
-        info("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
+        @info string("Reweighting distribution at ", round(T2[1]*100)/100, " and ", round(T2[2]*100)/100)
         Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])    # 200 sarebbe l'fstep deprecato...
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         EEr2 = MC.energyReweight(T, T2[2], EE)
+        # da sostituire con Array{Union{Float64, Missing}}(missing,2) (si perde compatibilità 0.6)
         CVr, CVr2 = zeros(2), zeros(2)
         if length(EEr1) > 5*10^5 && length(EEr2) > 5*10^5
             C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
@@ -57,14 +54,14 @@ end
     return P, dP, E, dE, CV, CV2, τ, OP, reweight_data
 end
 
-T = [0.04:0.02:0.54; 0.56:0.04:1.24] # set per lavoro tutta notte
-#T = 0.16:0.04:0.44
+T = [0.04:0.02:0.72; 0.76:0.04:1.24] # set per lavoro tutta notte # aumentare divisore se ρ bassa
+#T = 0.055:0.005:0.2
 N = 32
-ρ = 0.1
+ρ = 0.07
 V = N./ρ
 
 # map the parallelPV function to the ρ array
-#@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
+@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
 
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]
@@ -90,7 +87,7 @@ gui()
 file = string("./Plots/Tcv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P1,file)
 P2 = scatter(T, CV, label="CV", reuse = false)
-scatter!(data_r[:T], data_r[:Cv,], label="CV reweight")
+scatter!(data_r[:T], data_r[:Cv], label="CV reweight")  # doesn't filter zeros yet
 gui()
 file = string("./Plots/TCv_",N,"_rho",ρ,"_T",T[1],"-",T[end],".pdf")
 savefig(P2,file)

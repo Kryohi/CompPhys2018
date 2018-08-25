@@ -2,24 +2,20 @@ module MC
 
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
-# aumentare raggio di autocorrelazione per scelta di D
 # recuperare dati da fase di termalizzazione?
+# salvare in dataframe D ottimali, da recuperare in simulazioni successive
 # limitare calcoli per pressione, che non è così importante
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
-# ...oppure come da appunti
 # sistemare/verificare parametro d'ordine
 # parallelizzare e ottimizzare
-# autocorrelazione in modo più furbo (fourier, Wiener–Khinchin)
+# ricontrollare fft_acf
 # kernel openCL?
-# provare a riscrivere in C loop simulazione
 # individuare zona di transizione di fase (con cv) con loop su temperature
-# implementare reweighting per raffinare picco
 # trovare picco per diverse ρ
 # grafici
-# profit
+# riscrivere in C+OpenMPI
 
-(VERSION >= v"0.7-") && (using Statistics, FFTW, Distributed)
-using DataFrames, CSV, ProgressMeter, PyCall, Plots
+using Statistics, FFTW, Distributed, DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
@@ -43,7 +39,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
-    D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
+    D = a*Df    # initial Δ is passed as a fraction of lattice step a
     X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
     @show a/D; println()
 
@@ -70,9 +66,8 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
     end
     H = U.+3N*T/2
     P = P2.+rho*T
-    gc()
 
-    @time C_H = fft_acf(H, 35000)
+    @time C_H = fft_acf(H, 36000)   # don't put more than ~36k if using non-fft acf
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -85,36 +80,17 @@ end
 
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
-function metropolis_MP(; N=108, T=.7, rho=.2, Df=1/70, maxsteps=10^6)
+function metropolis_MP(; N=108, T=.4, rho=.2, Df=1/70, maxsteps=10^6, bmaxs=18*10^5)
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
-    @show D = a*Df    # Δ iniziale lo scegliamo come frazione di passo reticolare
-    X, D, jbi = burnin(X, D, T, L, a)  # evolve until at equilibrium, while tuning Δ
-    @show D/a
-    println()
+    D = a*Df    # initial Δ is passed as a fraction of lattice step a
+    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
+    @show a/D; println()
+
 
     function metropolis(X::Array{Float64}, seed::Int, steps::Int64) # da portare fuori prima o poi
-        Y = zeros(3N)   # array of proposals
-        E, P2, j = 0.0, 0.0, 0.0
-        srand(seed)
-        for i = 1:steps
-            Y .= X .+ D.*(rand(3N).-0.5)    # Proposal
-            shiftSystem!(Y,L)
-            ap = exp((energy(X,L) - energy(Y,L))/T)   # P[Y]/P[X]
-            η = rand(3N)
-            @inbounds for i = 1:length(X)
-                if η[i] < ap
-                    X[i] = Y[i]
-                    j += 1
-                end
-            end
-            E += energy(X,L)
-            P2 += vpressure(X,L)
-        end
-        @show P2/steps
-        @show j/steps
-        return E/steps, P2/steps, j/steps
+
     end
 
     R = pmap(n -> metropolis(X, n, maxsteps÷4), [68 42 1 69]')
@@ -122,9 +98,14 @@ function metropolis_MP(; N=108, T=.7, rho=.2, Df=1/70, maxsteps=10^6)
 
     H = mean(U) + 3N*T/2
     P = mean(P2)+rho*T
-    CV = 0.0 #cv(H,T)
-    prettyPrint(T, rho, H, P, CV)
-    return H, P, CV, jbi, mean(j)/3N
+    @time C_H = fft_acf(H, 36000)
+    τ = sum(C_H)
+    CV = cv(H,T,C_H)
+    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
+    prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
+    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
+
+    return H, P, j./(3N), C_H, CV, CV2, OP
 end
 
 
@@ -213,7 +194,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.69
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
-                # since equilibrium has not been reached yet.
+                # since equilibrium has not been reached yet (probably).
                 if n>wnd*3 && τ[n÷wnd] < minimum(abs.(τ[3:n÷wnd-1]))
                     @show D_chosen = D
                 end
@@ -221,7 +202,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
 
             elseif jm[n÷wnd] < 0.25
                 @show D = D*0.7
-                τ[n÷wnd] = 1e6
+                τ[n÷wnd] = 1e6  # big value, so it won't get chosen
             else
                 @show D = D*1.3
                 τ[n÷wnd] = 1e6
@@ -230,7 +211,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
     end
 
     if D_chosen == D0
-        warn("No suitable Δ value was found, using the latest found...")
+        @warn "No suitable Δ value was found, using the latest found..."
         D_chosen = D
     end
 
@@ -267,7 +248,7 @@ end
 function energy(r::Array{Float64,1},L::Float64)
     V = 0.0
     @inbounds for l=0:Int(length(r)/3)-1
-        @simd for i=0:l-1
+        for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
@@ -311,7 +292,6 @@ variance2(A::Array{Float64}, ch) =
 cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
 
 
-# Da velocizzare
 function acf(H::Array{Float64,1}, k_max::Int64)
 
     Z = H .- mean(H)
@@ -411,7 +391,7 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     a = L / Na  # passo reticolare
     X = M[1:3:3N,1]
     #pick the particles near the plane x=a/4
-    I = find(abs.(X -a/4) .< a/4)
+    I = findall(abs.(X -a/4) .< a/4)
     # now the X indices of M in the choosen plane are 3I-2
     scatter(M[3I-1,1], M[3I,1], m=(7,0.7,:red,Plots.stroke(0)),w=7, xaxis=("x",(-L/2,L/2)),
      yaxis=("y",(-L/2,L/2)), leg=false)
@@ -432,7 +412,7 @@ function simpleReweight(T0::Float64, T1::Float64, O::Array{Float64}, E::Array{Fl
     if length(O) == length(E)
         return sum(O.*exp.((1/T0-1/T1).*E)) / sum(exp.((1/T0-1/T1).*E))
     else
-        warn("Dimension mismatch between O and E, returning 0...")
+        @warn "Dimension mismatch between O and E, returning 0..."
         return 0.0
     end
 end
@@ -447,7 +427,7 @@ function simpleReweight(T0::Float64, TT::Array{Float64}, O::Array{Float64}, E::A
         end
         return O2
     else
-        warn("Dimension mismatch between O and E, returning 0...")
+        @warn "Dimension mismatch between O and E, returning 0..."
         return zeros(length(TT))
     end
 end
@@ -457,7 +437,7 @@ end
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
     ## Binning  (da ricontrollare e velocizzare)
-    bins = linspace(minimum(E), maximum(E), length(E)/10000)
+    bins = LinRange(minimum(E), maximum(E), length(E)÷10000)
     δE = bins[2] - bins[1];
     ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
     nbin = zeros(Int64, length(bins))
@@ -493,7 +473,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ratio = zeros(Float64, length(pesi))
     @inbounds for j=1:length(nbin)
         # 100 numero arbitrario, se nuovi bin superano vecchi solo in code poco popolate chissene
-        if pesi[j]/nbin[j] < 1 || nbin[j] >= 42
+        if pesi[j]/nbin[j] < 1 || nbin[j] >= 69
             ratio[j] = pesi[j] / nbin[j]
         else
             ratio[j] = 1.0
@@ -502,10 +482,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     # se ratio[qualsiasi] maggiore di 1 vuol dire che la nuova distr si sta prendendo
     # più configurazioni di quelle disponibili, e si riscala pesi di conseguenza
     @show maxratio = maximum(ratio)
-    maxratio>3 && warn("Possibly too few samples avalaible for reweighting, caution with the results")
     pesi = pesi ./ maxratio
-    #plot(nbin, label="orig")
-    #plot!(pesi); gui()
+    #plot(nbin, label="orig"); plot!(pesi); gui()
 
     ## pesca di pesi configurazioni da ogni bin di nbin
     E2 = zeros(length(E))
@@ -517,7 +495,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
         end
     end
     filter!(x->x≠0, E2)
-    (length(E2)<length(E)/10) && warn("Reweighted energy samples low")
+    (length(E2)<length(E)/10) && (@warn "Reweighted energy samples low")
     return E2
 end
 
@@ -537,7 +515,7 @@ function saveCSV(rho, N, T, EE, PP, CV, CV2, C_H, OP)
     data = DataFrame(E=EE, P=PP, CV=CV, CV2=CV2, OP=OP, Ch=[C_H; missings(length(EE)-length(C_H))])
     file = string("./Data/MCtemp_",N,"_rho",rho,"_T",T,".csv")
     CSV.write(file, data)
-    info("Data saved in ", file)
+    @info string("Data saved in ", file)
 end
 
 function avg3D(A::Array{Float64,1})
