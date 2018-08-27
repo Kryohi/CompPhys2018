@@ -37,8 +37,10 @@ nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number 
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
         EEr2 = MC.energyReweight(T, T2[2], EE)
-        # da sostituire con Array{Union{Float64, Missing}}(missing,2) (si perde compatibilità 0.6)
-        CVr, CVr2 = zeros(2), zeros(2)
+        # To replace with
+        #CVr, CVr2 = Array{Union{Float64,Missing}}(missing,2), Array{Union{Float64,Missing}}(missing,2)
+        # when Plots will be missings-compliant
+        CVr, CVr2 = ones(2).*NaN, ones(2).*NaN
         if length(EEr1) > 5*10^5 && length(EEr2) > 5*10^5
             C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
             τ1, τ2 = sum(C_H1), sum(C_H2)
@@ -57,7 +59,7 @@ end
 T = [0.04:0.02:0.72; 0.76:0.04:1.24] # set per lavoro tutta notte # aumentare divisore se ρ bassa
 #T = 0.055:0.005:0.2
 N = 32
-ρ = 0.07
+ρ = 0.02
 V = N./ρ
 
 # map the parallelPV function to the ρ array
