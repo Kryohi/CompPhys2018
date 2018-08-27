@@ -3,8 +3,7 @@ module MC
 ## TODO
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
 # recuperare dati da fase di termalizzazione?
-# salvare in dataframe D ottimali, da recuperare in simulazioni successive
-# limitare calcoli per pressione, che non è così importante
+# salvare in dataframe Δ ottimali, da recuperare in simulazioni successive
 # aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
 # sistemare/verificare parametro d'ordine
 # parallelizzare e ottimizzare
