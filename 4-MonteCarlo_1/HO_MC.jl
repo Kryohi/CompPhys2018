@@ -1,4 +1,6 @@
 
+HO(x::Float64,ω::Float64) = ω^2*x^2 /2  # not used
+
 # toy model of canonical ensemble of harmonic oscillators
 function oscillator(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
 
@@ -12,12 +14,11 @@ function oscillator(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
     for n=1:maxsteps
         # Proposta
         Y .= X .+ D.*(rand(3N).-0.5)
-        #shiftSystem!(Y,10.0) # serve? boh
         # P[Y]/P[X]
-        ap = exp.((LJ.(X,.5) - LJ.(Y,.5))/T0)
+        ap = exp((HO.(X,.5) - HO.(Y,.5))/T0)
         η = rand(3N)
         for i = 1:length(X)
-            if η[i] < ap[i]
+            if η[i] < ap
                 X[i] = Y[i]
                 j[n] += 1
             end
