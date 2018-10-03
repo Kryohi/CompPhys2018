@@ -229,7 +229,6 @@ end
 ## Evolution
 ##
 
-HO(x::Float64,ω::Float64) = ω^2*x^2 /2  # not used
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
 
@@ -317,7 +316,6 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
 
     Z = H .- mean(H)
     N = length(Z)
-    C_H = zeros(k_max)
     fvi = rfft(Z)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
@@ -381,7 +379,6 @@ function make3Dplot(A::Array{Float64}; T= -1.0, rho=-1.0)
     gui()
 end
 
-
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
@@ -435,7 +432,7 @@ end
 # poi pesca da E il numero di pesi giusto da ogni bin (attualmente tutti fino a raggiungere numero pesi)
 function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
-    ## Binning  (da ricontrollare e velocizzare)
+    ## Binning (da ricontrollare e velocizzare)
     bins = LinRange(minimum(E), maximum(E), length(E)÷10000)
     δE = bins[2] - bins[1];
     ebin = zeros(Int64, length(E)) # assegna un bin ad ogni E[i]
