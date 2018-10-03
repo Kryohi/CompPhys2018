@@ -3,7 +3,7 @@ using Statistics, Distributed, Plots, DataFrames, CSV
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
 
-nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number of logical cores)
+nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logical cores)
 @everywhere push!(LOAD_PATH, pwd()) # add current working directory to LOAD path
 @everywhere include(string(pwd(), "/MC_sim.jl"))
 @everywhere using Statistics, FFTW, Distributed
@@ -11,7 +11,7 @@ nprocs()<4 && addprocs(4)   # add local worker processes (where N is the number 
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
 # some good values are ~1/50 for 32 particles and ~1/75 for 128, but it also depends on T and ρ
-#@time EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=6*10^6, Df=1/42)
+#@time EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=10*10^6, Df=1/42)
 
 
 ##
