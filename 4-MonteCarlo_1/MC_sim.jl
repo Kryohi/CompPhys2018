@@ -27,7 +27,7 @@ any(x->x=="Video", readdir("./")) || mkdir("Video")
 
 # Main function, it creates the initial system, runs a (long) burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*10^5, csv=false, anim=false)
+function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^7, bmaxs=24*10^5, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
@@ -66,7 +66,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^6, bmaxs=18*1
     H = U.+3N*T/2
     P = P2.+rho*T
 
-    @time C_H = fft_acf(H, 36000)   # don't put more than ~36k if using non-fft acf
+    @time C_H = fft_acf(H, 42000)   # don't put more than ~36k if using non-fft acf
     τ = sum(C_H)
     CV = cv(H,T,C_H)
     CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
@@ -79,7 +79,7 @@ end
 
 ## WIP: doesn't save arrays (expected) but neither can calculate CV
 # multi process implementation, using pmap
-function metropolis_MP(; N=108, T=.4, rho=.2, Df=1/70, maxsteps=10^6, bmaxs=18*10^5)
+function metropolis_MP(; N=108, T=.4, rho=.2, Df=1/70, maxsteps=10^7, bmaxs=24*10^5)
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L, T)   # creates FCC crystal
@@ -194,7 +194,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet (probably).
-                if n>wnd*3 && τ[n÷wnd] < minimum(abs.(τ[3:n÷wnd-1]))
+                if n>wnd*3 && abs(τ[n÷wnd]) < minimum(abs.(τ[3:n÷wnd-1]))
                     @show D_chosen = D
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
@@ -521,7 +521,7 @@ end
 
 
 # creates an array with length N of gaussian distributed numbers using Box-Muller
-function vecboxMuller(sigma::Float64, N::Int, x0=0.0)
+@inbounds function vecboxMuller(sigma::Float64, N::Int, x0=0.0)
     #srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
