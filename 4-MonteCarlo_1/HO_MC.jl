@@ -4,12 +4,12 @@ HO(x::Float64,ω::Float64) = ω^2*x^2 /2  # not used
 # toy model of canonical ensemble of harmonic oscillators
 function oscillator(; N=500, D=0.5, T0=3.0, maxsteps=10^4)
 
-    c = 1/D # non ho ancora capito dove va usato
+    c = 1/D
     # inizializzazione come gaussiana, ma potrebbe anche essere uniforme
     X = vecboxMuller(1.0,3N)
     Y = zeros(3N)
     j = zeros(Int64, maxsteps)
-    X, jeq = equilibrium(X,D,T0)
+    X, jeq = equilibriumOSC(X,D,T0)
 
     for n=1:maxsteps
         # Proposta
