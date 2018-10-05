@@ -17,8 +17,7 @@ module MC
 using Statistics, FFTW, Distributed, DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
 fnt = "sans-serif"
-default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
-legendfont=Plots.font(fnt,14))
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),legendfont=Plots.font(fnt,14))
 
 # add missing directories in current folder
 any(x->x=="Data", readdir("./")) || mkdir("Data")
@@ -190,7 +189,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             jm[n÷wnd] = mean(j[(n-wnd+1):n])./(3N)
             println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4)
 
-            if jm[n÷wnd] > 0.25 && jm[n÷wnd] < 0.69
+            if jm[n÷wnd] > 0.33 && jm[n÷wnd] < 0.69
                 # if acceptance rate is good, choose D to minimize autocorrelation
                 # the first condition excludes the τ values found in the first 3 windows,
                 # since equilibrium has not been reached yet (probably).
@@ -199,7 +198,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
                 end
                 @show D = D_chosen*(1 + rand()/2 - 0.25)
 
-            elseif jm[n÷wnd] < 0.25
+            elseif jm[n÷wnd] < 0.33
                 @show D = D*0.7
                 τ[n÷wnd] = 1e6  # big value, so it won't get chosen
             else
@@ -262,6 +261,7 @@ function energy(r::Array{Float64,1},L::Float64)
     end
     return V
 end
+
 
 @fastmath function vpressure(r::Array{Float64,1},L::Float64)
     P = 0.0
