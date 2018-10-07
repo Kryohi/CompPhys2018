@@ -484,7 +484,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ## pesca di pesi configurazioni da ogni bin di nbin
     E2 = zeros(length(E))
     count = zeros(Int64, length(pesi))
-    for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
+    @inbounds for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
         if count[ebin[i]] <= pesi[ebin[i]]
             E2[i] = E[i]
             count[ebin[i]] += 1
