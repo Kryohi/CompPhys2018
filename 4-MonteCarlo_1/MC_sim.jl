@@ -296,7 +296,7 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     C_H = zeros(k_max)
 
     if k_max>20000
-        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)   # inutile
     end
 
     @fastmath for k = 1:k_max
@@ -484,7 +484,7 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
     ## pesca di pesi configurazioni da ogni bin di nbin
     E2 = zeros(length(E))
     count = zeros(Int64, length(pesi))
-    for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
+    @inbounds for i=1:length(E)   # andrebbero pescati a intervalli (regolari o casuali), non tutti in fila
         if count[ebin[i]] <= pesi[ebin[i]]
             E2[i] = E[i]
             count[ebin[i]] += 1
