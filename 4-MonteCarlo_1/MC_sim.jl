@@ -296,7 +296,7 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     C_H = zeros(k_max)
 
     if k_max>20000
-        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)   # inutile
     end
 
     @fastmath for k = 1:k_max

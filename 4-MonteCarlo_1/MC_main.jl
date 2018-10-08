@@ -60,7 +60,7 @@ end
 T = [0.04:0.02:0.16; 0.18:0.01:0.72; 0.76:0.04:1.28] # set per lavoro tutta notte # aumentare divisore se ρ bassa
 #T = 0.055:0.005:0.2
 N = 32
-ρ = 0.2
+ρ = 0.23
 V = N./ρ
 
 # map the parallelPV function to the ρ array
