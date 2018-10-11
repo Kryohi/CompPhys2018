@@ -21,7 +21,7 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
 @everywhere function parallelMC(rho, N, T, Tarray)
     @info string("Run ", findfirst(Tarray.==T), "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/68)) #1/76 per ρ=0.01
+    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/63)) #1/76 per ρ=0.01
 
     @info string("Run ", findfirst(Tarray.==T), " finished, with tau = ", sum(C_H))
     E, dE = mean(EE), std(EE)   # usare variance2?
@@ -33,7 +33,7 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
     #T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
     T2 = [T-0.003333; T+0.0033333]
     if T<0.7
-        @info string("Reweighting distribution at ", round(T2[1]*1000)/1000, " and ", round(T2[2]*100)/100)
+        @info string("Reweighting distribution at ", round(T2[1]*1000)/1000, " and ", round(T2[2]*1000)/1000)
         Pr = MC.simpleReweight(T, T2, PP, EE[1:200:end])    # 200 sarebbe l'fstep deprecato...
         Er = MC.simpleReweight(T, T2, EE, EE)
         @time EEr1 = MC.energyReweight(T, T2[1], EE)
@@ -43,7 +43,7 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
         # when Plots will be missings-compliant
         CVr, CVr2 = ones(2).*NaN, ones(2).*NaN
         if length(EEr1) > 5*10^5 && length(EEr2) > 5*10^5
-            C_H1, C_H2 = MC.fft_acf(EEr1, 35000), MC.fft_acf(EEr2, 35000)
+            C_H1, C_H2 = MC.fft_acf(EEr1, 42000), MC.fft_acf(EEr2, 42000)
             τ1, τ2 = sum(C_H1), sum(C_H2)
             CVr[1] = MC.cv(EEr1, T2[1], C_H1)
             CVr2[1] = MC.variance(EEr1[1:ceil(Int,τ1/5):end])/T2[1]^2 + 1.5T2[1]
@@ -60,7 +60,7 @@ end
 T = [0.04:0.02:0.16; 0.18:0.01:0.72; 0.76:0.04:1.28] # set per lavoro tutta notte # aumentare divisore se ρ bassa
 #T = 0.055:0.005:0.2
 N = 32
-ρ = 0.23
+ρ = 0.35
 V = N./ρ
 
 # map the parallelPV function to the ρ array
