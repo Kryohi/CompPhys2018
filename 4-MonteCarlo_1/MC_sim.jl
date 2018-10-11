@@ -315,7 +315,6 @@ end
 function fft_acf(H::Array{Float64,1}, k_max::Int)
 
     Z = H .- mean(H)
-    N = length(Z)
     fvi = rfft(Z)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
