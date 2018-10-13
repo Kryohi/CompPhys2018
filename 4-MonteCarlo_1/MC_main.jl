@@ -23,12 +23,12 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
     # Df iniziale andrebbe ottimizzato anche per T
     EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/100)) #1/75 per ρ=0.01
 
-    @info string("Run ", findfirst(Tarray.==T),
-    " finished, with tau = ", sum(C_H), " (T = ", T, "rho = ", rho, ")")
-    E, dE = mean(EE), std(EE)   # usare variance2?
-    P, dP = mean(PP), std(PP)
     τ = sum(C_H)
+    E, dE = mean(EE), std(EE[1:ceil(Int,τ/5):end])   # usare variance2?
+    P, dP = mean(PP), std(PP[1:ceil(Int,τ/5):end])
     OP, dOP = mean(OP), std(OP)
+    @info string("Run ", findfirst(Tarray.==T),
+    " finished, with tau = ", τ, " (T = ", T, "rho = ", rho, ")")
 
     # Reweighting
     #T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
