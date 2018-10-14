@@ -11,7 +11,7 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
 # Df is the initial Δ step value (as a fraction of a) and should be chosen quite carefully,
 # even if it gets optimized during the burn-in
 # some good values are ~1/70 for 32 particles and ~1/100 for 108, but it also depends on T and ρ
-#@time EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=32, T=0.5, rho=0.35, maxsteps=10*10^6, Df=1/42)
+#@time EE, PP, jj, C_H, CV, CV2, = MC.metropolis_ST(N=108, T=0.4, rho=0.14, maxsteps=20*10^6, Df=1/100)
 
 
 ##
@@ -21,14 +21,14 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
 @everywhere function parallelMC(rho, N, T, Tarray)
     @info string("Run ", findfirst(Tarray.==T), "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/100)) #1/75 per ρ=0.01
+    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/70)) #1/75 per ρ=0.01
 
     τ = sum(C_H)
     E, dE = mean(EE), std(EE[1:ceil(Int,τ/5):end])   # usare variance2?
     P, dP = mean(PP), std(PP[1:ceil(Int,τ/5):end])
     OP, dOP = mean(OP), std(OP)
     @info string("Run ", findfirst(Tarray.==T),
-    " finished, with tau = ", τ, " (T = ", T, "rho = ", rho, ")")
+    " finished, with tau = ", τ, " (T = ", T, ", rho = ", rho, ")")
 
     # Reweighting
     #T2 = [T-0.00667; T+0.00667] # delta in modo da far uscire punti equispaziati
@@ -59,8 +59,8 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
 end
 
 T = [0.04:0.02:0.16; 0.18:0.01:0.72; 0.76:0.04:1.28] # set per lavoro tutta notte # aumentare divisore se ρ bassa
-#T = 0.055:0.005:0.2
-N = 108
+#T = [0.04:0.02:0.7; 0.72:0.04:1.26]
+N = 32
 ρ = 0.14
 V = N./ρ
 
