@@ -141,7 +141,7 @@ function forces(r::Array{Float64,1}, L::Float64)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
                 #dV = -der_LJ(sqrt(dr2))
-                dV = -24*dr2^-4 + 48*dr2^-7
+                dV = -24/(dr2*dr2*dr2*dr2) + 48/(dr2^3*dr2^2*dr2^2)
                 F[3l+1] += dV*dx
                 F[3l+2] += dV*dy
                 F[3l+3] += dV*dz
@@ -170,7 +170,7 @@ end
 
 function energy(r,v,L)
     #T = (v[1]^2 + v[2]^2 + v[3]^2)/2 #perché nel ciclo sotto il primo elemento non verrebbe considerato
-    T=0.0
+    T = 0.0
     V = 0.0
     @inbounds for l=0:Int(length(r)/3)-1
         T += (v[3l+1]^2 + v[3l+2]^2 + v[3l+3]^2)./2
@@ -183,11 +183,12 @@ function energy(r,v,L)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                V += LJ(sqrt(dr2))
+                #V += LJ(sqrt(dr2))
+                V += 1.0/(dr2^3)^2 - 1.0/dr2^3
             end
         end
     end
-    return T+V
+    return T+V*4
 end
 
 @fastmath @inbounds temperature(V) = sum(V.^2)/(length(V))   # *m/k se si usano quantità vere
@@ -206,7 +207,8 @@ end
             dz = dz - L*round(dz/L)
             dr2 = dx^2 + dy^2 + dz^2
             if dr2 < L*L/4
-                P += der_LJ(sqrt(dr2))*dr2
+                #P += der_LJ(sqrt(dr2))*dr2
+                P += 24/(dr2*dr2*dr2) - 48/(dr2^2*dr2^2*dr2^2)
             end
         end
     end

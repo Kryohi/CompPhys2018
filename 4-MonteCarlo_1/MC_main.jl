@@ -1,5 +1,5 @@
 
-using Statistics, Distributed, Plots, DataFrames, CSV
+using Statistics, Distributed, Plots, DataFrames, CSV, ProgressMeter
 push!(LOAD_PATH, pwd())
 include(string(pwd(), "/MC_sim.jl"))
 
@@ -21,11 +21,11 @@ nprocs()<4 && addprocs(4)   # add local worker processes (N is the num of logica
 @everywhere function parallelMC(rho, N, T, Tarray)
     @info string("Run ", findfirst(Tarray.==T), "/", length(Tarray))
     # Df iniziale andrebbe ottimizzato anche per T
-    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=24*10^6, Df=(1/70)) #1/75 per ρ=0.01
+    EE, PP, jj, C_H, CV, CV2, OP = MC.metropolis_ST(N=N, T=T, rho=rho, maxsteps=28*10^6, Df=(1/70), bmaxs=36*10^5) # 1/80 or less for ρ very small
 
     τ = sum(C_H)
     E, dE = mean(EE), std(EE[1:ceil(Int,τ/5):end])   # usare variance2?
-    P, dP = mean(PP), std(PP[1:ceil(Int,τ/5):end])
+    P, dP = mean(PP), std(PP[1:ceil(Int,τ/1000):end])
     OP, dOP = mean(OP), std(OP)
     @info string("Run ", findfirst(Tarray.==T),
     " finished, with tau = ", τ, " (T = ", T, ", rho = ", rho, ")")
@@ -61,11 +61,11 @@ end
 T = [0.04:0.02:0.16; 0.18:0.01:0.72; 0.76:0.04:1.28] # set per lavoro tutta notte # aumentare divisore se ρ bassa
 #T = [0.04:0.02:0.7; 0.72:0.04:1.26]
 N = 32
-ρ = 0.14
+ρ = 0.21
 V = N./ρ
 
 # map the parallelPV function to the ρ array
-@time result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
+@showprogress result = pmap(T0 -> parallelMC(ρ, N, T0, T), T)
 
 # extract the resulting arrays from the result tuple
 P, dP = [ x[1] for x in result ], [ x[2] for x in result ]

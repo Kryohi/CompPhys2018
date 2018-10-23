@@ -53,11 +53,13 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^7, bmaxs=24*1
         Y .= X .+ D.*(rand(3N).-0.5)    # Proposta
         shiftSystem!(Y,L)
         ap = exp((U[n] - energy(Y,L))/T)   # P[Y]/P[X]
+        # eta = rand()
+        # (eta < ap) && (X .= Y)
         η = rand(3N)
         for i = 1:length(X)
             if η[i] < ap
                 X[i] = Y[i]
-                j[n] += 1
+                #j[n] += 1
             end
         end
         next!(prog)
@@ -75,36 +77,6 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^7, bmaxs=24*1
     return H, P, j./(3N), C_H, CV, CV2, OP
 end
 
-
-## WIP: doesn't save arrays (expected) but neither can calculate CV
-# multi process implementation, using pmap
-function metropolis_MP(; N=108, T=.4, rho=.2, Df=1/70, maxsteps=10^7, bmaxs=24*10^5)
-
-    L = cbrt(N/rho)
-    X, a = initializeSystem(N, L, T)   # creates FCC crystal
-    D = a*Df    # initial Δ is passed as a fraction of lattice step a
-    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
-    @show a/D; println()
-
-
-    function metropolis(X::Array{Float64}, seed::Int, steps::Int64) # da portare fuori prima o poi
-
-    end
-
-    R = pmap(n -> metropolis(X, n, maxsteps÷4), [68 42 1 69]')
-    U, P2, j = [x[1] for x in R], [x[2] for x in R], [x[3] for x in R]
-
-    H = mean(U) + 3N*T/2
-    P = mean(P2)+rho*T
-    @time C_H = fft_acf(H, 36000)
-    τ = sum(C_H)
-    CV = cv(H,T,C_H)
-    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
-    prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
-    csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
-
-    return H, P, j./(3N), C_H, CV, CV2, OP
-end
 
 
 ## -------------------------------------
@@ -161,6 +133,7 @@ function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float
             end
         end
     end
+    j = zeros(maxsteps)
 
     # Δ selection + moar thermalization
     @inbounds for n=1:maxsteps
@@ -255,11 +228,11 @@ function energy(r::Array{Float64,1},L::Float64)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
                 #V += LJ(sqrt(dr2))
-                V += 4*(1.0/(dr2^3)^2 - 1.0/dr2^3)
+                V += 1.0/(dr2^3)^2 - 1.0/dr2^3
             end
         end
     end
-    return V
+    return V*4
 end
 
 
@@ -325,7 +298,7 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
 end
 
 
-@fastmath function orderParameter(r::Array{Float64}, L::Float64)
+function orderParameter(r::Array{Float64}, L::Float64)
     N = Int(size(r,1)/3)
     Na = round(Int,∛(N/4)) # number of cells per dimension
     a = L / Na  # passo reticolare
@@ -453,8 +426,8 @@ function energyReweight(T0::Float64, T1::Float64, E::Array{Float64})
 
     num, den = 0.0, 0.0
     @inbounds for i=1:length(E) # calcola E media ripesata
-        num += pesi[ebin[i]]*E[i]*exp((1/T0-1/T1)*E[i])
-        den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])
+        num += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i]*E[i]) #
+        den += pesi[ebin[i]]*exp((1/T0-1/T1)*E[i])  #
     end
     E2mean = num/den  # energia media ripesata, da forzare
     wrongmean = sum(pesi.*(bins .+ δE/2)) / length(E)
