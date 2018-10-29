@@ -4,15 +4,10 @@ module MC
 # scelta D in base a media pesata con τ invece che τ migliore, usando vettore D
 # recuperare dati da fase di termalizzazione?
 # salvare in dataframe Δ ottimali, da recuperare in simulazioni successive
-# aggiungere check equilibrio con convoluzione per smoothing e derivata discreta
+# aggiungere check equilibrio
 # sistemare/verificare parametro d'ordine
-# parallelizzare e ottimizzare
-# ricontrollare fft_acf
+# parallelizzare?
 # kernel openCL?
-# individuare zona di transizione di fase (con cv) con loop su temperature
-# trovare picco per diverse ρ
-# grafici
-# riscrivere in C+OpenMPI
 
 using Statistics, FFTW, Distributed, DataFrames, CSV, ProgressMeter, PyCall, Plots
 pyplot(size=(800, 600))
@@ -38,7 +33,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^7, bmaxs=24*1
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
     D = a*Df    # initial Δ is passed as a fraction of lattice step a
-    X, D = burnin(X, D, T, L, a, bmaxs)  # evolve until at equilibrium, while tuning Δ
+    X, D = burn_in(X, D, T, L, bmaxs)  # evolve until at equilibrium, while tuning Δ
     @show a/D; println()
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
@@ -70,7 +65,7 @@ function metropolis_ST(; N=108, T=.5, rho=.5, Df=1/70, maxsteps=10^7, bmaxs=24*1
     @time C_H = fft_acf(H, 42000)   # don't put more than ~36k if using non-fft acf
     τ = sum(C_H)
     CV = cv(H,T,C_H)
-    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
+    CV2 = variance(H[1:ceil(Int,τ/2):end])/T^2
     prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
     csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
 
@@ -103,7 +98,7 @@ function initializeSystem(N::Int, L)
 end
 
 # bisognerebbe controllare meglio quando si è raggiunto l'eq termodinamico
-function burnin(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
+function burn_in(X::Array{Float64}, D0::Float64, T::Float64, L::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 12 # larghezza finestra su cui fissare D e calcolare tau
     k_max = wnd ÷ 10  # distanza massima per autocorrelazione
@@ -257,6 +252,7 @@ end
 
 
 variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
+#en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation#Effect_of_autocorrelation_(serial_correlation)
 variance2(A::Array{Float64}, ch) =
 (mean(A.*A) - mean(A)^2) * (1-sum((1 .- (1:length(ch))./length(ch)).*ch)*2/length(A))
 
@@ -292,9 +288,8 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
     acf = fvi .* conj.(fvi)
     acf = ifft(acf)
     acf = real.(acf)
-    C_H = acf[1:k_max]
 
-    return C_H./C_H[1]
+    return acf[1:k_max]./acf[1]
 end
 
 
@@ -497,7 +492,7 @@ end
     #srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
-    @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
+    @. sigma*[sqrt(-2*log(x1))*cos(2π*x2); sqrt(-2*log(x2))*sin(2π*x1)] + x0
 end
 
 

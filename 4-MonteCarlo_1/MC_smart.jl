@@ -1,9 +1,10 @@
 module MCs
 
-using Statistics, FFTW, Distributed, DataFrames, CSV, ProgressMeter, PyCall, Plots
-pyplot(size(800,500))
+using Statistics, FFTW, Distributed, Random, DataFrames, CSV, ProgressMeter, PyCall, Plots
+pyplot()
 fnt = "sans-serif"
-default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24),
+tickfont=Plots.font(fnt,14),
 legendfont=Plots.font(fnt,14))
 
 # add missing directories in current folder
@@ -11,63 +12,54 @@ any(x->x=="Data", readdir("./")) || mkdir("Data")
 any(x->x=="Plots", readdir("./")) || mkdir("Plots")
 any(x->x=="Video", readdir("./")) || mkdir("Video")
 
-# Main function, it creates the initial system, runs a (long) burn-in for thermalization
+# Main function, it creates the initial system, runs a (long)
+# burn-in for thermalization
 # and Δ selection and then runs a Monte Carlo simulation for maxsteps
-function metropolis_ST(; N=32, T=.5, rho=.5, Δ=2e-3, γ=0.065, maxsteps=10^7, bmaxs=36*10^5, csv=false, anim=false)
+function metropolis_ST(; N=32, T=.5, rho=.5, Δ=2e-3, A=0.00008, γ=0.065, maxsteps=10^7, bmaxs=72*10^4, csv=false, anim=false)
 
     Y = zeros(3N)   # array of proposals
     j = zeros(Int64, maxsteps)  # array di frazioni accettate
-    ap = zeros(3N) # acceptance probability
+    ap = zeros(N) # acceptance probability
     U = zeros(Float64, maxsteps)    # array of total energy
-    fstep = 10
-    XX = zeros(3N, maxsteps÷10)
+    fstep = 100
+    XX = zeros(3N, Int(maxsteps/fstep))
+    FF = zeros(3N, Int(maxsteps/fstep))    #TEMPORANEO
     P2 = zeros(Int(maxsteps/fstep))   # virial pressure
     OP = zeros(Int(maxsteps/fstep))  # order parameter
 
     L = cbrt(N/rho)
     X, a = initializeSystem(N, L)   # creates FCC crystal
-    X, γ = burnin(X, Δ, γ, T, L, a, bmaxs)  # evolve until equilibrium, while tuning Δ
-    A = γ*T
-    σ = sqrt(4A*Δ)/γ
-
-    @show γ; println()
-    @show energy(X,L)
-    scatter(filter(x->(abs.(x).<100000), en[1:10^5]), yaxis=("boh",(-7, +15)), reuse=false)
-    scatter!(filter(x->(abs.(x).<100000), wn[1:10^5]), label="wn")
-    gui()
-    #return zeros(Float64, maxsteps), P2, j./(3N), zeros(Float64, 120000), 0.0, 0.0, XX, AP, en, wn
+    X, A = burnin(X, A, T, L, a, bmaxs)  # evolve until equilibrium, while tuning Δ
+    #A = γ*T
+    #σ = sqrt(4A*Δ)/γ
 
     prog = Progress(maxsteps, dt=1.0, desc="Simulating...", barglyphs=BarGlyphs("[=> ]"), barlen=50)
-    for n = 1:maxsteps
+    @inbounds for n = 1:maxsteps
         if (n-1)%fstep == 0
             i = cld(n,fstep)
-            P2[i] = vpressure(X,L)
-            OP[i] = orderParameter(X,L)
             XX[:,i] = X
+            FF[:,i] = forces(X,L)
+            P2[i] = vpressure(X,L)
         end
         U[n] = energy(X,L)
-        ap = markovProbability!(X, Y, N, L, σ, Δ, T)
-        η = rand(3N)
-        for i = 1:length(X)
-            if η[i] < ap[i]
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
+        X, j[n] = oneParticleMove!(X, Y, N, L, A, T)
+        # ap = markovProbability!(X, Y, N, L, A, T)
         next!(prog)
     end
     H = U.+3N*T/2
     P = P2.+rho*T
-    @show mean(j)/(3N)
+    @show mean(j)/N
+    #@show mean(en)/mean(wn)
+    #@show mean(en.-wn)
 
-    @time C_H = fft_acf(H, 120000)   # don't put more than ~36k if using non-fft acf
+    C_H = fft_acf(H, 42000)   # not more than ~36k if using non-fft acf
     τ = sum(C_H)
     CV = cv(H,T,C_H)
-    CV2 = variance(H[1:ceil(Int,τ/5):end])/T^2 + 1.5T
+    CV2 = variance(H[1:ceil(Int,τ/2):end])/T^2 #  + 1.5T
     prettyPrint(T, rho, H, P, C_H, CV, CV2, OP)
     csv && saveCSV(rho, N, T, H, P, CV, CV2, C_H, OP)
 
-    return H, P, j./(3N), C_H, CV, CV2, XX, AP, en, wn
+    return H, P, j./(N), C_H, CV, CV2, XX, AP, en, wn
 end
 
 
@@ -91,14 +83,15 @@ function initializeSystem(N::Int, L)
     end
     X .+= a/4   # needed to avoid particles exactly at the edges of the box
     shiftSystem!(X,L)
+    X .+= a.*(rand(length(X)).-0.5)./100
     return X, a
 end
 
 # bisognerebbe controllare meglio quando si è raggiunto l'eq termodinamico
-function burnin(X::Array{Float64}, Δ::Float64, γ0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
+function burnin(X::Array{Float64}, A0::Float64, T::Float64, L::Float64, a::Float64, maxsteps::Int64)
 
     wnd = maxsteps ÷ 12 # larghezza finestra su cui fissare D e calcolare tau
-    k_max = wnd ÷ 10  # distanza massima per autocorrelazione
+    k_max = wnd ÷ 5  # distanza massima per autocorrelazione
     N = Int(length(X)/3)
     j = zeros(maxsteps)
     jm = zeros(maxsteps÷wnd)
@@ -106,100 +99,200 @@ function burnin(X::Array{Float64}, Δ::Float64, γ0::Float64, T::Float64, L::Flo
     ap = zeros(3N) #acceptance probability
     DD = zeros(maxsteps÷wnd*k_max)    # solo per grafico stupido
     U = zeros(maxsteps)
-    H = zeros(maxsteps)
     C_H_tot = []
     τ = ones(maxsteps÷wnd).*1e6
 
-    gamma_chosen = γ0    # D da restituire, minimizza autocorrelazione
-    γ = γ0
-    A = γ*T
-    σ = sqrt(4A*Δ)/γ
+    A_chosen = A0    # D da restituire, minimizza autocorrelazione
+    A = A0
+    #γ = γ0
+    #A = γ*T
+    #σ = sqrt(4A*Δ)/γ
 
     # pre-thermalization
     @inbounds for n = 1:50000
-        ap = markovProbability!(X, Y, N, L, σ, Δ, T)
-        η = rand(3N)
-        for i = 1:3N
-            if η[i] < ap[i]
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
+        #ap = markovProbability!(X, Y, N, L, A, T)
+        #η = rand(3N)
+        X, j[n] = oneParticleMove!(X, Y, N, L, A, T)
     end
-    @show mean(j[1:50000])/(3N)
+    @show mean(j[1:50000])/(N)
     j = zeros(maxsteps)
 
     # γ selection + moar thermalization
     for n=1:maxsteps
         U[n] = energy(X,L)
-        ap = markovProbability!(X, Y, N, L, σ, Δ, T)
-        η = rand(3N)
-        for i = 1:3N
-            if η[i] < ap[i]
-                X[i] = Y[i]
-                j[n] += 1
-            end
-        end
-        H[n] = U[n]+3N*T/2
+        #ap = markovProbability!(X, Y, N, L, A, T)
+        #η = rand(3N)
+        X, j[n] = oneParticleMove!(X, Y, N, L, A, T)
 
-        # ogni wnd passi calcola autocorrelazione e aggiorna D in base ad acceptance ratio e τ
+        # ogni wnd passi calcola autocorr e aggiorna D in base ad acceptance ratio e τ
         if n%wnd == 0
-            DD[Int(n÷wnd*k_max-k_max+1):Int(n÷wnd*k_max)] .= γ # per grafico stupido
-
-            C_H = fft_acf(H[n-wnd+1:n], k_max)  # autocorrelation function in current window
+            DD[Int(n÷wnd*k_max-k_max+1):Int(n÷wnd*k_max)] .= A # per grafico stupido
+            # autocorrelation function in current window
+            C_H = fft_acf(U[n-wnd+1:n], k_max)
             C_H_tot = [C_H_tot; C_H]
             τ[n÷wnd] = sum(C_H)
 
             # average acceptance ratio in current window
-            jm[n÷wnd] = mean(j[(n-wnd+1):n])/(3N)
-            println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ", round(τ[n÷wnd]*1e4)/1e4, "\t E = ", mean(H[(n-wnd+1):n]))
+            jm[n÷wnd] = mean(j[(n-wnd+1):n])/(N)
+            println("\nAcceptance ratio = ", round(jm[n÷wnd]*1e4)/1e4, ",\t τ = ",
+             round(τ[n÷wnd]*1e4)/1e4, "\t E = ", mean(U[(n-wnd+1):n])+3N*T/2)
 
-            if jm[n÷wnd] > 0.5 && jm[n÷wnd] < 0.84
-                # if acceptance rate is good, choose D to minimize autocorrelation
-                # the first condition excludes the τ values found in the first 3 windows,
-                # since equilibrium has not been reached yet (probably).
+            # if acceptance rate is good, choose D to minimize autocorrelation
+            # the first condition excludes the τ values found in the first 3 windows,
+            # since equilibrium has not been reached yet (probably).
+            if jm[n÷wnd] > 0.6 && jm[n÷wnd] < 0.9
 
                 #if n>wnd*3 && abs(τ[n÷wnd]) < minimum(abs.(τ[3:n÷wnd-1]))
-                if n>wnd*3 && abs(τ[n÷wnd]) > maximum(abs.(τ[3:n÷wnd-1]))
-                    @show gamma_chosen = γ
+                if n>wnd*3 && abs(τ[n÷wnd]) < minimum(abs.(τ[3:n÷wnd-1]))
+                    @show A_chosen = A
                 end
-                @show γ = gamma_chosen*(1 + rand()/2 - 0.25)
-                A = γ*T
-                σ = sqrt(4A*Δ)/γ
+                @show A = A_chosen*(1 + rand()/2 - 0.25)
+                #A = γ*T
+                #σ = sqrt(4A*Δ)/γ
 
-            elseif jm[n÷wnd] < 0.5
-                @show γ = γ*1.4
-                A = γ*T
-                σ = sqrt(4A*Δ)/γ
+            elseif jm[n÷wnd] < 0.6
+                @show A = A/1.3
+                #A = γ*T
+                #σ = sqrt(4A*Δ)/γ
                 τ[n÷wnd] = 1e6  # big value, so it won't get chosen
             else
-                @show γ = γ/1.4
-                A = γ*T
-                σ = sqrt(4A*Δ)/γ
+                @show A = A*1.3
+                #A = γ*T
+                #σ = sqrt(4A*Δ)/γ
                 τ[n÷wnd] = 1e6
             end
         end
     end
 
-    if gamma_chosen == γ0
+    if A_chosen == A0
         @warn "No suitable Δ value was found, using the latest found..."
-        gamma_chosen = γ
+        A_chosen = A
     end
 
-    boh = plot(DD.*500, yaxis=("cose",(-1.0,2.7)), label="Δ*30", reuse=false)
-    plot!(boh, (H[1:10:end].-H[1])./15 .+2.0, label="E-E[1]", linewidth=0.5)
+    boh = plot(DD.*2e7, yaxis=("cose",(-1.0,2.7)), label="Δ*2e7", reuse=false)
+    plot!(boh, (U[1:5:end].-U[1])./15 .+1.0, label="E-E[1]", linewidth=0.5)
     plot!(C_H_tot, linewidth=1.5, label="acf")
-    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./1000, label="τ/2e3")
-    hline!(boh, [gamma_chosen*30], label="Δfin", reuse=false)
+    plot!(boh, 1:k_max:(maxsteps÷wnd*k_max), τ./100, label="τ/100")
+    hline!(boh, [A_chosen*2e7], label="Δfin", reuse=false)
     gui()
 
-    return X, gamma_chosen
+    return X, A_chosen
 end
 
 
 ## -------------------------------------
 ## Evolution
 ##
+
+global AP, en, wn = [.0], [.0], [.0]
+
+function markovProbability!(X::Array{Float64,1}, Y::Array{Float64,1}, N::Int, L::Float64, A::Float64, T::Float64)
+
+    Wmn = zeros(N)  # biased weight from the current step to the proposed one
+    Wnm = zeros(N)  # biased weight from the proposed step to the current one
+    ap = zeros(N)
+
+    gauss = vecboxMuller(sqrt(2A),3N)    # 3N se in cartesiane
+    ϕ = rand(N)*2*π
+    θ = rand(N)*π
+    displ = gauss
+    # for n=1:N   # da precalcolare?
+    #     displ[3n-2] = gauss[n]*cos(ϕ[n])*sin(θ[n])
+    #     displ[3n-1] = gauss[n]*sin(ϕ[n])*sin(θ[n])
+    #     displ[3n-0] = gauss[n]*cos(θ[n])
+    # end
+
+    FX = forces(X,L)
+    #@show mean(FX), std(FX)
+
+    #Y .= X .+ D.*FX .+ gauss.*sigma     #force da dividere per γ?
+    deltaX = FX.*(A/T) .+ displ   # usare shiftSystem()?
+    #make3Dplot(FX.*(A/T))
+    #@show mean(deltaX), std(deltaX)
+    Y .= X .+ deltaX
+    make3Dplot(Y, rho=0.24)
+    gui()
+    FY = forces(Y,L)
+    #make3Dplot(FY)
+    deltaF = FY .- FX
+    sumF = FY .+ FX
+    shiftSystem!(Y,L)   # probably useless here
+    #@show mean(FY), std(FX)
+
+    for n=1:N   #ricontrollare segni, pedici
+        #Wmn[n] = (deltaX[3n-2]-FX[3n-2].*(A/T))^2 + (deltaX[3n-1]-FX[3n-1].*(A/T))^2 + (deltaX[3n]-FX[n].*(A/T))^2
+        #Wnm[n] = (deltaX[3n-2]+FY[3n-2].*(A/T))^2 + (deltaX[3n-1]+FY[3n-1].*(A/T))^2 + (deltaX[3n]+FY[3n].*(A/T))^2
+        #@show Wmn[n] - Wnm[n]
+        #println()
+        deltaW = (deltaF[3n-2]^2 + deltaF[3n-1]^2 + deltaF[3n]^2
+        + 2*(deltaF[3n-2]*FX[3n-2] + deltaF[3n-1]*FX[3n-1] + deltaF[3n]*FX[3n])) * A/(4T)
+        ap[n] = exp(-(energy(Y,L)-energy(X,L) + (deltaX[3n-2]*sumF[3n-2] + deltaX[3n-1]*sumF[3n-1] + deltaX[3n]*sumF[3n])/2 + deltaW)/T)
+    end
+    #WX = (deltaX .- FX).^2  #controllare segni
+    #WY = (-1 .* deltaX .- forces(Y,L)).^2
+    #println()
+
+    #ap = exp.((energy(X,L) - energy(Y,L))/T .+ (Wnm.-Wmn)./(4*A))
+
+    push!(en, (energy(X,L)-energy(Y,L))/T)
+    push!(wn, mean((Wnm.-Wmn)./(4*A)))
+    push!(AP, mean(ap))
+    #println(" ")
+    @show return ap
+end
+
+function oneParticleMove!(X::Array{Float64,1}, Y::Array{Float64,1}, N::Int, L::Float64, A::Float64, T::Float64)
+
+    displ = vecboxMuller(sqrt(2A),3N)
+    η = rand(N)
+    j = 0
+
+    @inbounds for n = randperm(N)
+        #println()
+        #@show n
+        #make3Dplot(X, rho=0.24)
+        Um = energySingle(X,L,n-1)
+        Fm = force(X,L,n-1)
+        #@show mean(Fm), std(Fm)
+
+        deltaX = Fm[1]*(A/T) + displ[3n-2]
+        deltaY = Fm[2]*(A/T) + displ[3n-1]
+        deltaZ = Fm[3]*(A/T) + displ[3n]
+        Y .= X
+        Y[3n-2] = X[3n-2] + deltaX
+        Y[3n-1] = X[3n-1] + deltaY
+        Y[3n-0] = X[3n-0] + deltaZ
+
+        #make3Dplot(Fm, rho=0.24)
+        Un = energySingle(Y,L,n-1)
+        Fn = force(Y,L,n-1)
+        #@show mean(Fn), std(Fn)
+        deltaF = Fn .- Fm
+        sumF = Fn .+ Fm
+        shiftSystem!(Y,L)   # probably useless here
+
+        deltaW = (deltaF[1]^2 + deltaF[2]^2 + deltaF[3]^2
+        + 2*(deltaF[1]*Fm[1] + deltaF[2]*Fm[2] + deltaF[3]*Fm[3])) * A/(4T)
+
+        ap = exp(-(Un-Um + (deltaX*sumF[1] + deltaY*sumF[2] + deltaZ*sumF[3])/2 + deltaW)/T)
+
+        ## metodo alternativo
+        #Wmn = (deltaX-Fm[1]*(A/T))^2 + (deltaY-Fm[2]*(A/T))^2 + (deltaZ-Fm[3].*(A/T))^2
+        #Wnm = (deltaX+Fn[1]*(A/T))^2 + (deltaY+Fn[2]*(A/T))^2 + (deltaZ+Fn[3].*(A/T))^2
+        #ap2 = exp((energy(X,L) - energy(Y,L))/T + (Wnm-Wmn)/(4*A))
+        #@show ap, ap2
+
+        if η[n] < ap
+            X[3n-2] = Y[3n-2]
+            X[3n-1] = Y[3n-1]
+            X[3n] = Y[3n]
+            j += 1
+        end
+
+    end
+    return X, j
+end
+
 
 LJ(dr::Float64) = 4*(dr^-12 - dr^-6)
 der_LJ(dr::Float64) = 4*(6*dr^-8 - 12*dr^-14)   # (dV/dr)/r
@@ -218,34 +311,14 @@ function shiftSystem(A::Array{Float64,1}, L::Float64)
     return B
 end
 
-global AP, en, wn = [.0], [.0], [.0]
-
-function markovProbability!(X::Array{Float64,1}, Y::Array{Float64,1}, N::Int, L::Float64, sigma::Float64, D::Float64, T::Float64)
-
-    gauss = vecboxMuller(sigma,3N)
-    FX = forces(X,L)
-    Y .= X .+ D.*FX .+ gauss.*sigma     #force da dividere per γ?
-    displacement = Y .- X   # usare shiftSystem()
-    shiftSystem!(Y,L)
-    WX = (displacement .- FX.*D).^2  #controllare segni
-    WY = (-1 .* displacement .- forces(Y,L).*D).^2
-    ap = exp.((energies(X,L) .- energies(Y,L))./T .+ (WX.-WY)./(4*D*T))
-
-    push!(en, mean((energies(X,L).-energies(Y,L))./T))
-    push!(wn, mean((WX.-WY)./(4*D*T)))
-    push!(AP, mean(ap))
-    #println(" ")
-    return ap
-end
-
 
 ## -------------------------------------
 ## Thermodinamic Properties
 ##
 
-function energy(r::Array{Float64,1},L::Float64)
+function energy(r::Array{Float64,1}, L::Float64)
     V = 0.0
-    @inbounds for l=0:Int(length(r)/3)-1
+    @inbounds for l=1:Int(length(r)/3)-1
         for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -263,11 +336,10 @@ function energy(r::Array{Float64,1},L::Float64)
     return V*4
 end
 
-function energies(r::Array{Float64,1},L::Float64)
-    V = zeros(length(r))
-    @inbounds for l=0:Int(length(r)/3)-1
-        for i=0:Int(length(r)/3)-1
-            if i != l
+function energySingle(r::Array{Float64,1}, L::Float64, i::Int)
+    V = 0.0
+    for l=0:Int(length(r)/3)-1
+        if i != l
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
             dy = r[3l+2] - r[3i+2]
@@ -276,43 +348,19 @@ function energies(r::Array{Float64,1},L::Float64)
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
             if dr2 < L*L/4
-                V[3l+1] += 4*(1.0/(dr2^3)^2 - 1.0/dr2^3)
+                #V += LJ(sqrt(dr2))
+                V += 1.0/(dr2^3)^2 - 1.0/dr2^3
             end
         end
-        end
-        V[3l+2] = V[3l+1]
-        V[3l+3] = V[3l+1]
     end
-    return V
-end
-function energies2(r::Array{Float64,1},L::Float64)
-    V = zeros(length(r))
-    @inbounds for l=0:Int(length(r)/3)-1
-        for i=0:Int(length(r)/3)-1
-            if i != l
-            dx = r[3l+1] - r[3i+1]
-            dx = dx - L*round(dx/L)
-            dy = r[3l+2] - r[3i+2]
-            dy = dy - L*round(dy/L)
-            dz = r[3l+3] - r[3i+3]
-            dz = dz - L*round(dz/L)
-            dr2 = dx*dx + dy*dy + dz*dz
-            if dr2 < L*L/4
-                V[3l+1] += 4*(1.0/((dx*dx)^3)^2 - 1.0/(dx*dx)^3)
-                V[3l+2] += 4*(1.0/((dy*dy)^3)^2 - 1.0/(dy*dy)^3)
-                V[3l+3] += 4*(1.0/((dz*dz)^3)^2 - 1.0/(dz*dz)^3)
-            end
-        end
-        end
-    end
-    return V
+    return V*4
 end
 
 
 
 function forces(r::Array{Float64,1}, L::Float64)
     F = zeros(length(r))
-    @inbounds for l=0:Int(length(r)/3)-1
+    for l=1:Int(length(r)/3)-1
          for i=0:l-1
             dx = r[3l+1] - r[3i+1]
             dx = dx - L*round(dx/L)
@@ -321,8 +369,10 @@ function forces(r::Array{Float64,1}, L::Float64)
             dz = r[3l+3] - r[3i+3]
             dz = dz - L*round(dz/L)
             dr2 = dx*dx + dy*dy + dz*dz
+            (dr2 == .0 ) && @warn "WTF"
+            (dr2 < 1e-9) && @warn "Particles too near each other"
             if dr2 < L*L/4
-                #dV = -der_LJ(sqrt(dr2))
+                #dV = -der_LJ(sqrt(dr2)) #add smoothing?
                 dV = -24/(dr2*dr2*dr2*dr2) + 48/(dr2^3*dr2^2*dr2^2)
                 F[3l+1] += dV*dx
                 F[3l+2] += dV*dy
@@ -334,6 +384,31 @@ function forces(r::Array{Float64,1}, L::Float64)
         end
     end
     return F
+end
+
+function force(r::Array{Float64,1}, L::Float64, i::Int)
+    FX, FY, FZ = 0.0, 0.0, 0.0
+    for l=0:Int(length(r)/3)-1
+        if i != l
+            dx = r[3l+1] - r[3i+1]
+            dx = dx - L*round(dx/L)
+            dy = r[3l+2] - r[3i+2]
+            dy = dy - L*round(dy/L)
+            dz = r[3l+3] - r[3i+3]
+            dz = dz - L*round(dz/L)
+            dr2 = dx*dx + dy*dy + dz*dz
+            #(dr2 == .0 ) && @warn "WTF"
+            #(dr2 < 1e-9) && @warn "Particles too near each other"
+            if dr2 < L*L/4
+                #dV = -der_LJ(sqrt(dr2)) #add smoothing?
+                dV = -24/(dr2*dr2*dr2*dr2) + 48/(dr2^3*dr2^2*dr2^2)
+                FX += dV*dx
+                FY += dV*dy
+                FZ += dV*dz
+            end
+        end
+    end
+    return [FX, FY, FZ]
 end
 
 
@@ -361,7 +436,7 @@ variance(A::Array{Float64}) = mean(A.*A) - mean(A)^2
 variance2(A::Array{Float64}, ch) =
 (mean(A.*A) - mean(A)^2) * (1-sum((1 .- (1:length(ch))./length(ch)).*ch)*2/length(A))
 
-cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2 + 1.5T
+cv(H::Array{Float64}, T::Float64, ch::Array{Float64}) = variance2(H,ch)/T^2# + 1.5T
 
 
 function acf(H::Array{Float64,1}, k_max::Int64)
@@ -386,51 +461,14 @@ function acf(H::Array{Float64,1}, k_max::Int64)
     return C_H ./ (CH1*length(H))    # unbiased and normalized autocorrelation function
 end
 
-@inbounds function fft_acf(H::Array{Float64,1}, k_max::Int)
+function fft_acf(H::Array{Float64,1}, k_max::Int)
 
     Z = H .- mean(H)
     fvi = rfft(Z)
-    acf = fvi .* conj.(fvi)
-    acf = ifft(acf)
+    acf = ifft(fvi .* conj.(fvi))
     acf = real.(acf)
-    C_H = acf[1:k_max]
 
-    return C_H./C_H[1]
-end
-
-
-function orderParameter(r::Array{Float64}, L::Float64)
-    N = Int(size(r,1)/3)
-    Na = round(Int,∛(N/4)) # number of cells per dimension
-    a = L / Na  # passo reticolare
-    dx = zeros(Na^3*3)
-    dy = zeros(Na^3*3)
-    dz = zeros(Na^3*3)
-    r0, = initializeSystem(N,L)
-    dx0 = zeros(Na^3*3)
-    dy0 = zeros(Na^3*3)
-    dz0 = zeros(Na^3*3)
-
-    @inbounds for k=0:Na^3-1
-        for i=1:3
-            dx[3k+i] = r[12k+1] - r[12k+3i+1]
-            dx[3k+i] -= L*round(dx[3k+i]/L)
-            dy[3k+i] = r[12k+2] - r[12k+3i+2]
-            dy[3k+i] -= L*round(dy[3k+i]/L)
-            dz[3k+i] = r[12k+3] - r[12k+3i+3]
-            dz[3k+i] -= L*round(dz[3k+i]/L)
-            dx0[3k+i] = r0[12k+1] - r0[12k+3i+1]
-            dx0[3k+i] -= L*round(dx0[3k+i]/L)
-            dy0[3k+i] = r0[12k+2] - r0[12k+3i+2]
-            dy0[3k+i] -= L*round(dy0[3k+i]/L)
-            dz0[3k+i] = r0[12k+3] - r0[12k+3i+3]
-            dz0[3k+i] -= L*round(dz0[3k+i]/L)
-        end
-    end
-    dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
-    R = sqrt.(dx0.^2 + dy0.^2 + dz0.^2)
-    K = 2π ./ R
-    ordPar = mean(cos.(K.*dr))
+    return acf[1:k_max]./acf[1]
 end
 
 
@@ -620,9 +658,8 @@ end
     #srand(60)   # sets the rng seed, to obtain reproducible numbers
     x1 = rand(Int(N/2))
     x2 = rand(Int(N/2))
-    @. [sqrt(-2sigma*log(1-x1))*cos(2π*x2); sqrt(-2sigma*log(1-x2))*sin(2π*x1)]
+    @. sigma*[sqrt(-2*log(x1))*cos(2π*x2); sqrt(-2*log(x2))*sin(2π*x1)] + x0
 end
-
 
 
 end
